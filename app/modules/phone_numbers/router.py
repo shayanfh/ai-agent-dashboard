@@ -1,0 +1,82 @@
+import uuid
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser, require_company_admin
+from app.modules.phone_numbers.schemas import PhoneNumberCreate, PhoneNumberUpdate, PhoneNumberResponse
+from app.modules.phone_numbers.service import PhoneNumberService
+from app.core.schemas import PaginatedResponse
+
+router = APIRouter()
+
+
+@router.get("", response_model=PaginatedResponse[PhoneNumberResponse])
+async def list_phone_numbers(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    return await service.list_phone_numbers(current_user, page, page_size)
+
+
+@router.post("", response_model=PhoneNumberResponse, status_code=201)
+async def create_phone_number(
+    data: PhoneNumberCreate,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    return await service.create_phone_number(data, current_user)
+
+
+@router.get("/{phone_id}", response_model=PhoneNumberResponse)
+async def get_phone_number(
+    phone_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    return await service.get_phone_number(phone_id, current_user)
+
+
+@router.patch("/{phone_id}", response_model=PhoneNumberResponse)
+async def update_phone_number(
+    phone_id: uuid.UUID,
+    data: PhoneNumberUpdate,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    return await service.update_phone_number(phone_id, data, current_user)
+
+
+@router.delete("/{phone_id}", status_code=204)
+async def delete_phone_number(
+    phone_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    await service.delete_phone_number(phone_id, current_user)
+
+
+@router.post("/{phone_id}/enable", response_model=PhoneNumberResponse)
+async def enable_phone_number(
+    phone_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    return await service.set_enabled(phone_id, True, current_user)
+
+
+@router.post("/{phone_id}/disable", response_model=PhoneNumberResponse)
+async def disable_phone_number(
+    phone_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PhoneNumberService(db)
+    return await service.set_enabled(phone_id, False, current_user)
