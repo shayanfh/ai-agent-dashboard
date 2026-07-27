@@ -49,7 +49,8 @@ class Agent(Base):
     greeting_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     transfer_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[AgentStatus] = mapped_column(
-        SAEnum(AgentStatus, name="agent_status"), default=AgentStatus.DRAFT
+        SAEnum(AgentStatus, name="agent_status", values_callable=lambda x: [e.value for e in x]),
+        default=AgentStatus.DRAFT,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

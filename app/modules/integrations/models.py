@@ -1,11 +1,14 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from sqlalchemy import String, Text, DateTime, Integer, Index, Enum as SAEnum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.modules.companies.models import Company
 
 
 class IntegrationType(str, Enum):
@@ -33,7 +36,8 @@ class Integration(Base):
         UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
     integration_type: Mapped[IntegrationType] = mapped_column(
-        SAEnum(IntegrationType, name="integration_type"), nullable=False
+        SAEnum(IntegrationType, name="integration_type", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     base_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -41,7 +45,8 @@ class Integration(Base):
     api_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     configuration: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     status: Mapped[IntegrationStatus] = mapped_column(
-        SAEnum(IntegrationStatus, name="integration_status"), default=IntegrationStatus.PENDING
+        SAEnum(IntegrationStatus, name="integration_status", values_callable=lambda x: [e.value for e in x]),
+        default=IntegrationStatus.PENDING,
     )
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

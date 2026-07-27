@@ -45,10 +45,12 @@ class Request(Base):
     customer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     customer_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     request_type: Mapped[RequestType] = mapped_column(
-        SAEnum(RequestType, name="request_type"), nullable=False
+        SAEnum(RequestType, name="request_type", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
     )
     status: Mapped[RequestStatus] = mapped_column(
-        SAEnum(RequestStatus, name="request_status"), default=RequestStatus.NEW
+        SAEnum(RequestStatus, name="request_status", values_callable=lambda x: [e.value for e in x]),
+        default=RequestStatus.NEW,
     )
     request_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     external_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

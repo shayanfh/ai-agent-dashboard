@@ -18,19 +18,19 @@ depends_on = None
 
 def upgrade() -> None:
     # ── ENUM types ────────────────────────────────────────────────────────────
-    op.execute("CREATE TYPE company_status AS ENUM ('active', 'inactive', 'suspended')")
-    op.execute("CREATE TYPE user_role AS ENUM ('super_admin', 'company_admin', 'operator')")
-    op.execute("CREATE TYPE agent_status AS ENUM ('active', 'inactive', 'draft')")
-    op.execute("CREATE TYPE connection_status AS ENUM ('connected', 'disconnected', 'error', 'pending')")
-    op.execute("CREATE TYPE call_status AS ENUM ('initiated', 'ringing', 'answered', 'in_progress', 'completed', 'missed', 'failed', 'transferred')")
-    op.execute("CREATE TYPE call_outcome AS ENUM ('booking_created', 'information_request', 'callback_requested', 'no_action', 'failed')")
-    op.execute("CREATE TYPE speaker_type AS ENUM ('caller', 'assistant', 'system')")
-    op.execute("CREATE TYPE request_type AS ENUM ('car_booking', 'table_reservation', 'callback', 'service_request', 'general_request')")
-    op.execute("CREATE TYPE request_status AS ENUM ('new', 'confirmed', 'contacted', 'cancelled', 'completed')")
-    op.execute("CREATE TYPE kb_item_status AS ENUM ('active', 'inactive')")
-    op.execute("CREATE TYPE doc_processing_status AS ENUM ('pending', 'processing', 'completed', 'failed')")
-    op.execute("CREATE TYPE integration_type AS ENUM ('erpnext', 'webhook', 'email', 'whatsapp')")
-    op.execute("CREATE TYPE integration_status AS ENUM ('connected', 'disconnected', 'error', 'pending')")
+    op.execute("""DO $$ BEGIN CREATE TYPE company_status AS ENUM ('active', 'inactive', 'suspended'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE user_role AS ENUM ('super_admin', 'company_admin', 'operator'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE agent_status AS ENUM ('active', 'inactive', 'draft'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE connection_status AS ENUM ('connected', 'disconnected', 'error', 'pending'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE call_status AS ENUM ('initiated', 'ringing', 'answered', 'in_progress', 'completed', 'missed', 'failed', 'transferred'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE call_outcome AS ENUM ('booking_created', 'information_request', 'callback_requested', 'no_action', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE speaker_type AS ENUM ('caller', 'assistant', 'system'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE request_type AS ENUM ('car_booking', 'table_reservation', 'callback', 'service_request', 'general_request'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE request_status AS ENUM ('new', 'confirmed', 'contacted', 'cancelled', 'completed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE kb_item_status AS ENUM ('active', 'inactive'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE doc_processing_status AS ENUM ('pending', 'processing', 'completed', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE integration_type AS ENUM ('erpnext', 'webhook', 'email', 'whatsapp'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
+    op.execute("""DO $$ BEGIN CREATE TYPE integration_status AS ENUM ('connected', 'disconnected', 'error', 'pending'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;""")
 
     # ── companies ─────────────────────────────────────────────────────────────
     op.create_table(
@@ -44,7 +44,7 @@ def upgrade() -> None:
         sa.Column("phone_number", sa.String(50), nullable=True),
         sa.Column("email", sa.String(255), nullable=True),
         sa.Column("business_hours", postgresql.JSONB, nullable=True),
-        sa.Column("status", sa.Enum("active", "inactive", "suspended", name="company_status"), nullable=False, server_default="active"),
+        sa.Column("status", postgresql.ENUM("active", "inactive", "suspended",name="company_status", create_type=False), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -57,7 +57,7 @@ def upgrade() -> None:
         sa.Column("full_name", sa.String(255), nullable=False),
         sa.Column("email", sa.String(255), nullable=False, unique=True),
         sa.Column("hashed_password", sa.String(255), nullable=False),
-        sa.Column("role", sa.Enum("super_admin", "company_admin", "operator", name="user_role"), nullable=False),
+        sa.Column("role", postgresql.ENUM("super_admin", "company_admin", "operator",name="user_role", create_type=False), nullable=False),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -90,7 +90,7 @@ def upgrade() -> None:
         sa.Column("system_prompt", sa.Text, nullable=True),
         sa.Column("greeting_message", sa.Text, nullable=True),
         sa.Column("transfer_number", sa.String(50), nullable=True),
-        sa.Column("status", sa.Enum("active", "inactive", "draft", name="agent_status"), nullable=False, server_default="draft"),
+        sa.Column("status", postgresql.ENUM("active", "inactive", "draft",name="agent_status", create_type=False), nullable=False, server_default="draft"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -111,7 +111,7 @@ def upgrade() -> None:
         sa.Column("dispatch_rule_id", sa.String(255), nullable=True),
         sa.Column("transfer_number", sa.String(50), nullable=True),
         sa.Column("operating_hours", postgresql.JSONB, nullable=True),
-        sa.Column("connection_status", sa.Enum("connected", "disconnected", "error", "pending", name="connection_status"), nullable=False, server_default="pending"),
+        sa.Column("connection_status", postgresql.ENUM("connected", "disconnected", "error", "pending",name="connection_status", create_type=False), nullable=False, server_default="pending"),
         sa.Column("is_enabled", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -128,8 +128,8 @@ def upgrade() -> None:
         sa.Column("phone_number_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("phone_numbers.id", ondelete="SET NULL"), nullable=True),
         sa.Column("caller_number", sa.String(50), nullable=True),
         sa.Column("livekit_room_name", sa.String(255), nullable=True),
-        sa.Column("status", sa.Enum("initiated", "ringing", "answered", "in_progress", "completed", "missed", "failed", "transferred", name="call_status"), nullable=False, server_default="initiated"),
-        sa.Column("outcome", sa.Enum("booking_created", "information_request", "callback_requested", "no_action", "failed", name="call_outcome"), nullable=True),
+        sa.Column("status", postgresql.ENUM("initiated", "ringing", "answered", "in_progress", "completed", "missed", "failed", "transferred",name="call_status", create_type=False), nullable=False, server_default="initiated"),
+        sa.Column("outcome", postgresql.ENUM("booking_created", "information_request", "callback_requested", "no_action", "failed",name="call_outcome", create_type=False), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("answered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
@@ -156,7 +156,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("company_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("companies.id", ondelete="CASCADE"), nullable=False),
         sa.Column("call_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("calls.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("speaker", sa.Enum("caller", "assistant", "system", name="speaker_type"), nullable=False),
+        sa.Column("speaker", postgresql.ENUM("caller", "assistant", "system",name="speaker_type", create_type=False), nullable=False),
         sa.Column("text", sa.Text, nullable=False),
         sa.Column("sequence", sa.Integer, nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
@@ -176,8 +176,8 @@ def upgrade() -> None:
         sa.Column("agent_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("agents.id", ondelete="SET NULL"), nullable=True),
         sa.Column("customer_name", sa.String(255), nullable=True),
         sa.Column("customer_phone", sa.String(50), nullable=True),
-        sa.Column("request_type", sa.Enum("car_booking", "table_reservation", "callback", "service_request", "general_request", name="request_type"), nullable=False),
-        sa.Column("status", sa.Enum("new", "confirmed", "contacted", "cancelled", "completed", name="request_status"), nullable=False, server_default="new"),
+        sa.Column("request_type", postgresql.ENUM("car_booking", "table_reservation", "callback", "service_request", "general_request",name="request_type", create_type=False), nullable=False),
+        sa.Column("status", postgresql.ENUM("new", "confirmed", "contacted", "cancelled", "completed",name="request_status", create_type=False), nullable=False, server_default="new"),
         sa.Column("request_data", postgresql.JSONB, nullable=True),
         sa.Column("external_reference", sa.String(255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -196,7 +196,7 @@ def upgrade() -> None:
         sa.Column("question", sa.Text, nullable=False),
         sa.Column("answer", sa.Text, nullable=False),
         sa.Column("category", sa.String(100), nullable=True),
-        sa.Column("status", sa.Enum("active", "inactive", name="kb_item_status"), nullable=False, server_default="active"),
+        sa.Column("status", postgresql.ENUM("active", "inactive",name="kb_item_status", create_type=False), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -212,7 +212,7 @@ def upgrade() -> None:
         sa.Column("file_name", sa.String(255), nullable=False),
         sa.Column("file_type", sa.String(50), nullable=True),
         sa.Column("file_url", sa.Text, nullable=True),
-        sa.Column("processing_status", sa.Enum("pending", "processing", "completed", "failed", name="doc_processing_status"), nullable=False, server_default="pending"),
+        sa.Column("processing_status", postgresql.ENUM("pending", "processing", "completed", "failed",name="doc_processing_status", create_type=False), nullable=False, server_default="pending"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -224,13 +224,13 @@ def upgrade() -> None:
         "integrations",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("company_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("companies.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("integration_type", sa.Enum("erpnext", "webhook", "email", "whatsapp", name="integration_type"), nullable=False),
+        sa.Column("integration_type", postgresql.ENUM("erpnext", "webhook", "email", "whatsapp",name="integration_type", create_type=False), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("base_url", sa.Text, nullable=True),
         sa.Column("api_key_encrypted", sa.Text, nullable=True),
         sa.Column("api_secret_encrypted", sa.Text, nullable=True),
         sa.Column("configuration", postgresql.JSONB, nullable=True),
-        sa.Column("status", sa.Enum("connected", "disconnected", "error", "pending", name="integration_status"), nullable=False, server_default="pending"),
+        sa.Column("status", postgresql.ENUM("connected", "disconnected", "error", "pending",name="integration_status", create_type=False), nullable=False, server_default="pending"),
         sa.Column("last_sync_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error", sa.Text, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

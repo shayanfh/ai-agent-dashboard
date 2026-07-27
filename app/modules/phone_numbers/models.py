@@ -38,7 +38,8 @@ class PhoneNumber(Base):
     transfer_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     operating_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     connection_status: Mapped[ConnectionStatus] = mapped_column(
-        SAEnum(ConnectionStatus, name="connection_status"), default=ConnectionStatus.PENDING
+        SAEnum(ConnectionStatus, name="connection_status", values_callable=lambda x: [e.value for e in x]),
+        default=ConnectionStatus.PENDING,
     )
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(

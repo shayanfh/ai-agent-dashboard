@@ -27,7 +27,8 @@ class Company(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[CompanyStatus] = mapped_column(
-        SAEnum(CompanyStatus, name="company_status"), default=CompanyStatus.ACTIVE
+        SAEnum(CompanyStatus, name="company_status", values_callable=lambda x: [e.value for e in x]),
+        default=CompanyStatus.ACTIVE,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

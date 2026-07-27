@@ -38,7 +38,8 @@ class KnowledgeBaseItem(Base):
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[KBItemStatus] = mapped_column(
-        SAEnum(KBItemStatus, name="kb_item_status"), default=KBItemStatus.ACTIVE
+        SAEnum(KBItemStatus, name="kb_item_status", values_callable=lambda x: [e.value for e in x]),
+        default=KBItemStatus.ACTIVE,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -70,7 +71,7 @@ class KnowledgeDocument(Base):
     file_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     file_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     processing_status: Mapped[DocumentProcessingStatus] = mapped_column(
-        SAEnum(DocumentProcessingStatus, name="doc_processing_status"),
+        SAEnum(DocumentProcessingStatus, name="doc_processing_status", values_callable=lambda x: [e.value for e in x]),
         default=DocumentProcessingStatus.PENDING,
     )
     created_at: Mapped[datetime] = mapped_column(
