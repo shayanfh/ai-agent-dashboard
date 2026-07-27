@@ -37,7 +37,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: mozaic
-      POSTGRES_PASSWORD: admin@mozaic
+      POSTGRES_PASSWORD: adminmozaic
       POSTGRES_DB: ai_agent_dashboard
     volumes:
       - postgres_data:/var/lib/postgresql/data
