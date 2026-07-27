@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-from sqlalchemy import String, Text, DateTime, Boolean, Index, Enum as SAEnum, ForeignKey
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import String, Text, DateTime, Boolean, Index, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
+from app.core.types import EnumByValue
+
+if TYPE_CHECKING:
+    from app.modules.companies.models import Company
 
 
 class AgentStatus(str, Enum):
@@ -28,15 +32,12 @@ class Agent(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     business_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     language: Mapped[str] = mapped_column(String(10), default="en")
-    # ── Realtime mode ─────────────────────────────────────────────────────────
     # When True, a single realtime API (e.g. OpenAI Realtime) handles STT+LLM+TTS
-    # in one WebSocket connection. realtime_provider/realtime_model are used instead
-    # of the separate stt/llm/tts fields.
+    # in one WebSocket connection.
     use_realtime: Mapped[bool] = mapped_column(Boolean, default=False)
     realtime_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     realtime_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    # ── Pipeline mode ─────────────────────────────────────────────────────────
-    # When use_realtime=False, each stage uses its own provider/model.
+    # Pipeline mode: separate providers per stage
     voice_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     voice_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     tts_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -49,8 +50,7 @@ class Agent(Base):
     greeting_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     transfer_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[AgentStatus] = mapped_column(
-        SAEnum(AgentStatus, name="agent_status", values_callable=lambda x: [e.value for e in x]),
-        default=AgentStatus.DRAFT,
+        EnumByValue(AgentStatus, "agent_status"), default=AgentStatus.DRAFT
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

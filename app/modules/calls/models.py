@@ -1,11 +1,18 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Integer, Index, Enum as SAEnum, ForeignKey, Float, Text
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import String, Boolean, DateTime, Integer, Index, ForeignKey, Float, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
+from app.core.types import EnumByValue
+
+if TYPE_CHECKING:
+    from app.modules.companies.models import Company
+    from app.modules.agents.models import Agent
+    from app.modules.phone_numbers.models import PhoneNumber
+    from app.modules.requests.models import Request
 
 
 class CallStatus(str, Enum):
@@ -56,12 +63,10 @@ class Call(Base):
     caller_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     livekit_room_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status: Mapped[CallStatus] = mapped_column(
-        SAEnum(CallStatus, name="call_status", values_callable=lambda x: [e.value for e in x]),
-        default=CallStatus.INITIATED,
+        EnumByValue(CallStatus, "call_status"), default=CallStatus.INITIATED
     )
     outcome: Mapped[Optional[CallOutcome]] = mapped_column(
-        SAEnum(CallOutcome, name="call_outcome", values_callable=lambda x: [e.value for e in x]),
-        nullable=True,
+        EnumByValue(CallOutcome, "call_outcome"), nullable=True
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -104,7 +109,7 @@ class CallMessage(Base):
     call_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("calls.id", ondelete="CASCADE"), nullable=False
     )
-    speaker: Mapped[Speaker] = mapped_column(SAEnum(Speaker, name="speaker_type", values_callable=lambda x: [e.value for e in x]), nullable=False)
+    speaker: Mapped[Speaker] = mapped_column(EnumByValue(Speaker, "speaker_type"), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,11 +1,17 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-from sqlalchemy import String, DateTime, Index, Enum as SAEnum, ForeignKey
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import String, DateTime, Index, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
+from app.core.types import EnumByValue
+
+if TYPE_CHECKING:
+    from app.modules.companies.models import Company
+    from app.modules.calls.models import Call
+    from app.modules.agents.models import Agent
 
 
 class RequestStatus(str, Enum):
@@ -45,12 +51,10 @@ class Request(Base):
     customer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     customer_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     request_type: Mapped[RequestType] = mapped_column(
-        SAEnum(RequestType, name="request_type", values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
+        EnumByValue(RequestType, "request_type"), nullable=False
     )
     status: Mapped[RequestStatus] = mapped_column(
-        SAEnum(RequestStatus, name="request_status", values_callable=lambda x: [e.value for e in x]),
-        default=RequestStatus.NEW,
+        EnumByValue(RequestStatus, "request_status"), default=RequestStatus.NEW
     )
     request_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     external_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

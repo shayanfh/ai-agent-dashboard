@@ -1,11 +1,16 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Index, Enum as SAEnum, ForeignKey, JSON
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import String, Boolean, DateTime, Index, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
+from app.core.types import EnumByValue
+
+if TYPE_CHECKING:
+    from app.modules.companies.models import Company
+    from app.modules.agents.models import Agent
 
 
 class ConnectionStatus(str, Enum):
@@ -38,8 +43,7 @@ class PhoneNumber(Base):
     transfer_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     operating_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     connection_status: Mapped[ConnectionStatus] = mapped_column(
-        SAEnum(ConnectionStatus, name="connection_status", values_callable=lambda x: [e.value for e in x]),
-        default=ConnectionStatus.PENDING,
+        EnumByValue(ConnectionStatus, "connection_status"), default=ConnectionStatus.PENDING
     )
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(

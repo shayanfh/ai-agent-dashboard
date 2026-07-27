@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from sqlalchemy import String, Text, JSON, DateTime, Enum as SAEnum
+from sqlalchemy import String, Text, JSON, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
+from app.core.types import EnumByValue
 
 
 class CompanyStatus(str, Enum):
@@ -27,8 +28,7 @@ class Company(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[CompanyStatus] = mapped_column(
-        SAEnum(CompanyStatus, name="company_status", values_callable=lambda x: [e.value for e in x]),
-        default=CompanyStatus.ACTIVE,
+        EnumByValue(CompanyStatus, "company_status"), default=CompanyStatus.ACTIVE
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-from sqlalchemy import String, Text, DateTime, Index, Enum as SAEnum, ForeignKey
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy import String, Text, DateTime, Index, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
+from app.core.types import EnumByValue
+
+if TYPE_CHECKING:
+    from app.modules.agents.models import Agent
 
 
 class KBItemStatus(str, Enum):
@@ -38,8 +42,7 @@ class KnowledgeBaseItem(Base):
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[KBItemStatus] = mapped_column(
-        SAEnum(KBItemStatus, name="kb_item_status", values_callable=lambda x: [e.value for e in x]),
-        default=KBItemStatus.ACTIVE,
+        EnumByValue(KBItemStatus, "kb_item_status"), default=KBItemStatus.ACTIVE
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -71,7 +74,7 @@ class KnowledgeDocument(Base):
     file_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     file_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     processing_status: Mapped[DocumentProcessingStatus] = mapped_column(
-        SAEnum(DocumentProcessingStatus, name="doc_processing_status", values_callable=lambda x: [e.value for e in x]),
+        EnumByValue(DocumentProcessingStatus, "doc_processing_status"),
         default=DocumentProcessingStatus.PENDING,
     )
     created_at: Mapped[datetime] = mapped_column(
