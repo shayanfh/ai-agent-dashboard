@@ -111,18 +111,18 @@ async def seed():
         await db.flush()
 
         # ─── Agents ──────────────────────────────────────────────────────────────
+        # Realtime agent: OpenAI Realtime API handles STT + LLM + TTS in one WebSocket.
         agent1 = Agent(
             id=uuid.UUID("11111111-1111-1111-1111-111111111120"),
             company_id=company1.id,
             name="Car Rental Booking Agent",
             business_type="car_rental",
             language="en",
+            use_realtime=True,
+            realtime_provider="openai",
+            realtime_model="gpt-4o-realtime-preview",
             voice_provider="openai",
             voice_id="alloy",
-            stt_provider="openai",
-            stt_model="whisper-1",
-            llm_provider="openai",
-            llm_model="gpt-4.1-mini",
             system_prompt=(
                 "You are a professional car rental booking assistant for Demo Car Rental. "
                 "Help customers reserve vehicles by collecting: vehicle type, pickup location, "
@@ -133,18 +133,18 @@ async def seed():
             transfer_number="1001",
             status=AgentStatus.ACTIVE,
         )
+        # Realtime agent in Arabic
         agent2 = Agent(
             id=uuid.UUID("22222222-2222-2222-2222-222222222220"),
             company_id=company2.id,
             name="Restaurant Reservation Agent",
             business_type="restaurant",
             language="ar",
+            use_realtime=True,
+            realtime_provider="openai",
+            realtime_model="gpt-4o-realtime-preview",
             voice_provider="openai",
             voice_id="nova",
-            stt_provider="openai",
-            stt_model="whisper-1",
-            llm_provider="openai",
-            llm_model="gpt-4.1-mini",
             system_prompt=(
                 "You are a friendly restaurant reservation assistant for Demo Restaurant Group. "
                 "Help customers make table reservations by asking for: date, time, number of guests, and branch. "
