@@ -69,16 +69,7 @@ class CallService:
         call = await self.repo.get_by_id_and_company(call_id, company_id)
         if not call:
             raise NotFoundError("Call not found")
-        response = CallDetailResponse.model_validate(call)
-        if call.messages:
-            response.messages = [CallMessageResponse.model_validate(m) for m in call.messages]
-        if call.agent:
-            response.agent = AgentBrief.model_validate(call.agent)
-        if call.phone_number_obj:
-            response.phone_number = PhoneNumberBrief.model_validate(call.phone_number_obj)
-        if call.request:
-            response.request = RequestBrief.model_validate(call.request)
-        return response
+        return CallDetailResponse.model_validate(call)
 
     async def create_call(self, data: CallCreate, current_user: CurrentUser) -> CallResponse:
         company_id = self._get_company_id(current_user)

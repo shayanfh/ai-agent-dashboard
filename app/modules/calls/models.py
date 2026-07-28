@@ -88,11 +88,11 @@ class Call(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    company: Mapped["Company"] = relationship("Company", back_populates="calls")
-    agent: Mapped[Optional["Agent"]] = relationship("Agent", back_populates="calls")
-    phone_number_obj: Mapped[Optional["PhoneNumber"]] = relationship("PhoneNumber", back_populates="calls")
-    messages: Mapped[list] = relationship("CallMessage", back_populates="call", lazy="noload", order_by="CallMessage.sequence")
-    request: Mapped[Optional["Request"]] = relationship("Request", back_populates="call", lazy="noload", uselist=False)
+    company: Mapped["Company"] = relationship("Company", back_populates="calls", lazy="raise")
+    agent: Mapped[Optional["Agent"]] = relationship("Agent", back_populates="calls", lazy="raise")
+    phone_number_obj: Mapped[Optional["PhoneNumber"]] = relationship("PhoneNumber", back_populates="calls", lazy="raise")
+    messages: Mapped[list] = relationship("CallMessage", back_populates="call", order_by="CallMessage.sequence", lazy="raise")
+    request: Mapped[Optional["Request"]] = relationship("Request", back_populates="call", uselist=False, lazy="raise")
 
 
 class CallMessage(Base):
