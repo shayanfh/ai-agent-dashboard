@@ -256,6 +256,63 @@ Response:
 }
 ```
 
+## Domain, Nginx, and HTTPS
+
+Nginx is the public reverse proxy on ports `80` and `443`. The API itself is
+only exposed to the internal Docker network on port `8000`. Certbot shares its
+certificate and ACME challenge volumes with Nginx and checks for renewals every
+12 hours.
+
+### 1. Configure DNS and firewall
+
+Create an `A` record for the API hostname pointing to the server's public IP.
+If the server has IPv6, configure the matching `AAAA` record as well. Allow
+inbound TCP ports `80` and `443` in the server firewall/security group.
+
+### 2. Configure the environment
+
+Set these values in `.env`:
+
+```dotenv
+DOMAIN=api.example.com
+LETSENCRYPT_EMAIL=admin@example.com
+CORS_ORIGINS=["https://dashboard.example.com"]
+```
+
+Use only the hostname in `DOMAIN`; do not include `https://` or a path.
+
+### 3. Start the stack
+
+```bash
+docker compose up -d --build
+```
+
+On the first start, Nginx uses a one-day self-signed fallback certificate so
+that it can start before the real certificate exists.
+
+### 4. Request the first Let's Encrypt certificate
+
+After DNS resolves to this server, run:
+
+```bash
+docker compose run --rm --entrypoint /bin/sh certbot -c \
+  'certbot certonly --webroot --webroot-path=/var/www/certbot \
+  --domain "$DOMAIN" --email "$LETSENCRYPT_EMAIL" \
+  --agree-tos --no-eff-email'
+
+docker compose restart nginx
+```
+
+Verify the deployment:
+
+```bash
+curl -I https://api.example.com/health
+```
+
+The long-running `certbot` service renews eligible certificates automatically.
+Nginx reloads its configuration every 12 hours so renewed certificates are
+picked up without recreating the stack.
+
 ## Project Structure
 
 ```
