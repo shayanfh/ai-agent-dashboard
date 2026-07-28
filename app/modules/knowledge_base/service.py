@@ -1,9 +1,11 @@
 import uuid
 import math
 from typing import Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.dependencies import CurrentUser
+from app.modules.agents.models import Agent
 from app.modules.knowledge_base.models import KBItemStatus, DocumentProcessingStatus
 from app.modules.knowledge_base.repository import KBItemRepository, KBDocumentRepository
 from app.modules.knowledge_base.schemas import (
@@ -16,11 +18,22 @@ from app.core.schemas import PaginatedResponse
 class KBItemService:
     def __init__(self, db: AsyncSession):
         self.repo = KBItemRepository(db)
+        self.db = db
 
     def _get_company_id(self, current_user: CurrentUser) -> uuid.UUID:
         if not current_user.company_id:
             raise PermissionDeniedError("No company context")
         return uuid.UUID(current_user.company_id)
+
+    async def _validate_agent(self, agent_id: uuid.UUID, company_id: uuid.UUID) -> None:
+        agent = await self.db.scalar(
+            select(Agent).where(
+                Agent.id == agent_id,
+                Agent.company_id == company_id,
+            )
+        )
+        if not agent:
+            raise NotFoundError("Agent not found")
 
     async def list_items(
         self,
@@ -50,6 +63,8 @@ class KBItemService:
         if not current_user.is_company_admin and not current_user.is_super_admin:
             raise PermissionDeniedError()
         company_id = self._get_company_id(current_user)
+        if data.agent_id:
+            await self._validate_agent(data.agent_id, company_id)
         item_data = data.model_dump()
         item_data["company_id"] = company_id
         item = await self.repo.create(item_data)
@@ -62,6 +77,8 @@ class KBItemService:
         item = await self.repo.get_by_id_and_company(item_id, company_id)
         if not item:
             raise NotFoundError("Knowledge base item not found")
+        if data.agent_id:
+            await self._validate_agent(data.agent_id, company_id)
         item = await self.repo.update(item, data.model_dump(exclude_none=True))
         return KBItemResponse.model_validate(item)
 
@@ -85,6 +102,16 @@ class KBDocumentService:
             raise PermissionDeniedError("No company context")
         return uuid.UUID(current_user.company_id)
 
+    async def _validate_agent(self, agent_id: uuid.UUID, company_id: uuid.UUID) -> None:
+        agent = await self.db.scalar(
+            select(Agent).where(
+                Agent.id == agent_id,
+                Agent.company_id == company_id,
+            )
+        )
+        if not agent:
+            raise NotFoundError("Agent not found")
+
     async def list_documents(
         self, current_user: CurrentUser, page: int = 1, page_size: int = 20
     ) -> PaginatedResponse[KBDocumentResponse]:
@@ -100,6 +127,8 @@ class KBDocumentService:
         if not current_user.is_company_admin and not current_user.is_super_admin:
             raise PermissionDeniedError()
         company_id = self._get_company_id(current_user)
+        if data.agent_id:
+            await self._validate_agent(data.agent_id, company_id)
         allowed_types = {"pdf", "txt", "docx", "md", "csv"}
         if data.file_type and data.file_type.lower().lstrip(".") not in allowed_types:
             from app.core.exceptions import ValidationError

@@ -3,6 +3,7 @@ import math
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.dependencies import CurrentUser
@@ -74,6 +75,29 @@ class CallService:
 
     async def create_call(self, data: CallCreate, current_user: CurrentUser) -> CallResponse:
         company_id = self._get_company_id(current_user)
+        if data.agent_id:
+            from app.modules.agents.models import Agent
+
+            agent = await self.db.scalar(
+                select(Agent).where(
+                    Agent.id == data.agent_id,
+                    Agent.company_id == company_id,
+                )
+            )
+            if not agent:
+                raise NotFoundError("Agent not found")
+        if data.phone_number_id:
+            from app.modules.phone_numbers.models import PhoneNumber
+
+            phone_number = await self.db.scalar(
+                select(PhoneNumber).where(
+                    PhoneNumber.id == data.phone_number_id,
+                    PhoneNumber.company_id == company_id,
+                )
+            )
+            if not phone_number:
+                raise NotFoundError("Phone number not found")
+
         call_data = data.model_dump()
         call_data["company_id"] = company_id
         if not call_data.get("started_at"):
@@ -159,6 +183,17 @@ class CallService:
 
     async def _create_request_from_call(self, call, data: CallCompleteRequest, company_id: uuid.UUID):
         from app.modules.requests.models import Request, RequestStatus, RequestType
+
+        existing_result = await self.db.execute(
+            select(Request).where(
+                Request.call_id == call.id,
+                Request.company_id == company_id,
+            ).order_by(Request.created_at.asc()).limit(1)
+        )
+        existing_request = existing_result.scalars().first()
+        if existing_request:
+            return existing_request
+
         extracted = data.extracted_data or {}
         raw_type = extracted.get("request_type", "general_request")
         try:

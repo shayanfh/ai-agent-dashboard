@@ -12,7 +12,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.agents.models import Agent
+from app.modules.agents.models import Agent, AgentStatus
 from app.modules.calls.models import Call, CallStatus
 from app.modules.companies.models import Company
 
@@ -151,6 +151,69 @@ async def test_company_b_call_not_in_company_a_operator_list(
     assert response.status_code == 200
     call_ids = [item["id"] for item in response.json()["items"]]
     assert str(call_b.id) not in call_ids
+
+
+@pytest.mark.asyncio
+async def test_company_a_cannot_reference_company_b_agent(
+    client: AsyncClient,
+    admin_a_token: str,
+    company_b: Company,
+    db_session: AsyncSession,
+):
+    agent_b = Agent(
+        id=uuid.uuid4(),
+        company_id=company_b.id,
+        name="Company B Agent",
+        language="en",
+        status=AgentStatus.ACTIVE,
+    )
+    db_session.add(agent_b)
+    await db_session.flush()
+
+    headers = {"Authorization": f"Bearer {admin_a_token}"}
+    requests = [
+        (
+            "/api/v1/calls",
+            {
+                "agent_id": str(agent_b.id),
+                "caller_number": "+96890000001",
+            },
+        ),
+        (
+            "/api/v1/phone-numbers",
+            {
+                "phone_number": "+96890000002",
+                "agent_id": str(agent_b.id),
+            },
+        ),
+        (
+            "/api/v1/requests",
+            {
+                "agent_id": str(agent_b.id),
+                "request_type": "general_request",
+            },
+        ),
+        (
+            "/api/v1/knowledge-base/items",
+            {
+                "agent_id": str(agent_b.id),
+                "question": "Cross-tenant question",
+                "answer": "Must be rejected",
+            },
+        ),
+        (
+            "/api/v1/knowledge-base/documents",
+            {
+                "agent_id": str(agent_b.id),
+                "file_name": "cross-tenant.txt",
+                "file_type": "txt",
+            },
+        ),
+    ]
+
+    for url, payload in requests:
+        response = await client.post(url, json=payload, headers=headers)
+        assert response.status_code == 404, (url, response.text)
 
 
 @pytest.mark.asyncio

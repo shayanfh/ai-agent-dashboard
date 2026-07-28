@@ -59,7 +59,9 @@ class Integration(Base):
     )
 
     company: Mapped["Company"] = relationship("Company", back_populates="integrations")
-    logs: Mapped[list] = relationship("IntegrationLog", back_populates="integration", lazy="noload")
+    logs: Mapped[list["IntegrationLog"]] = relationship(
+        "IntegrationLog", back_populates="integration", lazy="noload", uselist=True
+    )
 
 
 class IntegrationLog(Base):

@@ -2,6 +2,7 @@ import uuid
 import math
 from datetime import datetime
 from typing import Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.dependencies import CurrentUser
@@ -14,6 +15,7 @@ from app.core.schemas import PaginatedResponse
 class RequestService:
     def __init__(self, db: AsyncSession):
         self.repo = RequestRepository(db)
+        self.db = db
 
     def _get_company_id(self, current_user: CurrentUser) -> uuid.UUID:
         if not current_user.company_id:
@@ -51,6 +53,29 @@ class RequestService:
 
     async def create_request(self, data: RequestCreate, current_user: CurrentUser) -> RequestResponse:
         company_id = self._get_company_id(current_user)
+        if data.call_id:
+            from app.modules.calls.models import Call
+
+            call = await self.db.scalar(
+                select(Call).where(
+                    Call.id == data.call_id,
+                    Call.company_id == company_id,
+                )
+            )
+            if not call:
+                raise NotFoundError("Call not found")
+        if data.agent_id:
+            from app.modules.agents.models import Agent
+
+            agent = await self.db.scalar(
+                select(Agent).where(
+                    Agent.id == data.agent_id,
+                    Agent.company_id == company_id,
+                )
+            )
+            if not agent:
+                raise NotFoundError("Agent not found")
+
         req_data = data.model_dump()
         req_data["company_id"] = company_id
         req = await self.repo.create(req_data)

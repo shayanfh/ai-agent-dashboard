@@ -80,6 +80,8 @@ async def resolve_agent(
     )
     if extension:
         query = query.where(PhoneNumber.extension == extension)
+    else:
+        query = query.where(PhoneNumber.extension.is_(None))
     result = await db.execute(query)
     pn = result.scalar_one_or_none()
     if not pn:
@@ -124,6 +126,8 @@ async def create_internal_call(
     )
     if data.extension:
         query = query.where(PhoneNumber.extension == data.extension)
+    else:
+        query = query.where(PhoneNumber.extension.is_(None))
     result = await db.execute(query)
     pn = result.scalar_one_or_none()
     if not pn:

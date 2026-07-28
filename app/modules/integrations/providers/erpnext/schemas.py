@@ -1,5 +1,5 @@
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ERPNextCustomer(BaseModel):
@@ -19,4 +19,4 @@ class ERPNextDocument(BaseModel):
 class ERPNextResponse(BaseModel):
     name: str
     doctype: str
-    data: dict[str, Any] = {}
+    data: dict[str, Any] = Field(default_factory=dict)

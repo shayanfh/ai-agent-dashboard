@@ -57,4 +57,6 @@ class PhoneNumber(Base):
 
     company: Mapped["Company"] = relationship("Company", back_populates="phone_numbers")
     agent: Mapped[Optional["Agent"]] = relationship("Agent", back_populates="phone_numbers")
-    calls: Mapped[list] = relationship("Call", back_populates="phone_number_obj", lazy="noload")
+    calls: Mapped[list["Call"]] = relationship(
+        "Call", back_populates="phone_number_obj", lazy="noload", uselist=True
+    )

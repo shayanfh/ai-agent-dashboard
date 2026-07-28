@@ -116,5 +116,8 @@ class CallResponse(BaseModel):
 class CallDetailResponse(CallResponse):
     messages: list[CallMessageResponse] = Field(default_factory=list)
     agent: Optional[AgentBrief] = None
-    phone_number: Optional[PhoneNumberBrief] = None
+    phone_number: Optional[PhoneNumberBrief] = Field(
+        default=None,
+        validation_alias="phone_number_obj",
+    )
     request: Optional[RequestBrief] = None

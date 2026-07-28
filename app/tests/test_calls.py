@@ -2,10 +2,12 @@ import uuid
 import pytest
 from datetime import datetime, timezone
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.calls.models import Call, CallStatus, CallOutcome
 from app.modules.agents.models import Agent
+from app.modules.requests.models import Request
 
 
 @pytest.mark.asyncio
@@ -36,6 +38,7 @@ async def test_get_call(client: AsyncClient, call_a: Call, admin_a_token: str):
     assert data["id"] == str(call_a.id)
     assert data["caller_number"] == "+96891000001"
     assert data["messages"] == []
+    assert data["phone_number"]["id"] == str(call_a.phone_number_id)
 
 
 @pytest.mark.asyncio
@@ -124,24 +127,28 @@ async def test_add_multiple_transcript_messages(
 
 @pytest.mark.asyncio
 async def test_complete_call_booking_creates_request(
-    client: AsyncClient, call_a: Call, admin_a_token: str
+    client: AsyncClient,
+    call_a: Call,
+    admin_a_token: str,
+    db_session: AsyncSession,
 ):
+    request_payload = {
+        "summary": "Customer requested an SUV from Muscat Airport.",
+        "outcome": "booking_created",
+        "was_transferred": False,
+        "extracted_data": {
+            "customer_name": "Ahmed",
+            "customer_phone": "+96890000001",
+            "request_type": "car_booking",
+            "vehicle_type": "SUV",
+            "pickup_location": "Muscat Airport",
+            "pickup_date": "2026-07-28",
+            "return_date": "2026-07-31",
+        },
+    }
     response = await client.post(
         f"/api/v1/calls/{call_a.id}/complete",
-        json={
-            "summary": "Customer requested an SUV from Muscat Airport.",
-            "outcome": "booking_created",
-            "was_transferred": False,
-            "extracted_data": {
-                "customer_name": "Ahmed",
-                "customer_phone": "+96890000001",
-                "request_type": "car_booking",
-                "vehicle_type": "SUV",
-                "pickup_location": "Muscat Airport",
-                "pickup_date": "2026-07-28",
-                "return_date": "2026-07-31",
-            },
-        },
+        json=request_payload,
         headers={"Authorization": f"Bearer {admin_a_token}"},
     )
     assert response.status_code == 200
@@ -152,6 +159,19 @@ async def test_complete_call_booking_creates_request(
     assert data["request"]["request_type"] == "car_booking"
     assert data["request"]["customer_name"] == "Ahmed"
     assert data["request"]["status"] == "new"
+
+    repeated_response = await client.post(
+        f"/api/v1/calls/{call_a.id}/complete",
+        json=request_payload,
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+    assert repeated_response.status_code == 200
+    assert repeated_response.json()["request"]["id"] == data["request"]["id"]
+
+    request_count = await db_session.scalar(
+        select(func.count()).select_from(Request).where(Request.call_id == call_a.id)
+    )
+    assert request_count == 1
 
 
 @pytest.mark.asyncio

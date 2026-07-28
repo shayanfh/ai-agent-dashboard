@@ -39,9 +39,21 @@ class Company(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    users: Mapped[list] = relationship("User", back_populates="company", lazy="noload")
-    agents: Mapped[list] = relationship("Agent", back_populates="company", lazy="noload")
-    phone_numbers: Mapped[list] = relationship("PhoneNumber", back_populates="company", lazy="noload")
-    calls: Mapped[list] = relationship("Call", back_populates="company", lazy="noload")
-    requests: Mapped[list] = relationship("Request", back_populates="company", lazy="noload")
-    integrations: Mapped[list] = relationship("Integration", back_populates="company", lazy="noload")
+    users: Mapped[list["User"]] = relationship(
+        "User", back_populates="company", lazy="noload", uselist=True
+    )
+    agents: Mapped[list["Agent"]] = relationship(
+        "Agent", back_populates="company", lazy="noload", uselist=True
+    )
+    phone_numbers: Mapped[list["PhoneNumber"]] = relationship(
+        "PhoneNumber", back_populates="company", lazy="noload", uselist=True
+    )
+    calls: Mapped[list["Call"]] = relationship(
+        "Call", back_populates="company", lazy="noload", uselist=True
+    )
+    requests: Mapped[list["Request"]] = relationship(
+        "Request", back_populates="company", lazy="noload", uselist=True
+    )
+    integrations: Mapped[list["Integration"]] = relationship(
+        "Integration", back_populates="company", lazy="noload", uselist=True
+    )

@@ -62,7 +62,15 @@ class Agent(Base):
     )
 
     company: Mapped["Company"] = relationship("Company", back_populates="agents")
-    phone_numbers: Mapped[list] = relationship("PhoneNumber", back_populates="agent", lazy="noload")
-    calls: Mapped[list] = relationship("Call", back_populates="agent", lazy="noload")
-    knowledge_items: Mapped[list] = relationship("KnowledgeBaseItem", back_populates="agent", lazy="noload")
-    knowledge_documents: Mapped[list] = relationship("KnowledgeDocument", back_populates="agent", lazy="noload")
+    phone_numbers: Mapped[list["PhoneNumber"]] = relationship(
+        "PhoneNumber", back_populates="agent", lazy="noload", uselist=True
+    )
+    calls: Mapped[list["Call"]] = relationship(
+        "Call", back_populates="agent", lazy="noload", uselist=True
+    )
+    knowledge_items: Mapped[list["KnowledgeBaseItem"]] = relationship(
+        "KnowledgeBaseItem", back_populates="agent", lazy="noload", uselist=True
+    )
+    knowledge_documents: Mapped[list["KnowledgeDocument"]] = relationship(
+        "KnowledgeDocument", back_populates="agent", lazy="noload", uselist=True
+    )

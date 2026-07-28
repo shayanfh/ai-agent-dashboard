@@ -29,6 +29,8 @@ class PhoneNumberRepository:
         query = select(PhoneNumber).where(PhoneNumber.phone_number == phone_number, PhoneNumber.is_enabled == True)
         if extension:
             query = query.where(PhoneNumber.extension == extension)
+        else:
+            query = query.where(PhoneNumber.extension.is_(None))
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
