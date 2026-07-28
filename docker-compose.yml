@@ -23,8 +23,8 @@ services:
   nginx:
     build:
       context: ./nginx
-    environment:
-      DOMAIN: ${DOMAIN:-localhost}
+    env_file:
+      - .env
     depends_on:
       api:
         condition: service_healthy
@@ -43,9 +43,8 @@ services:
 
   certbot:
     image: certbot/certbot:latest
-    environment:
-      DOMAIN: ${DOMAIN:-localhost}
-      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+    env_file:
+      - .env
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot_webroot:/var/www/certbot

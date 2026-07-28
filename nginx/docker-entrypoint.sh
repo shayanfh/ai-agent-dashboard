@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 
-domain="${DOMAIN:-localhost}"
+: "${DOMAIN:?DOMAIN must be set in .env}"
+
+domain="$DOMAIN"
 live_certificate="/etc/letsencrypt/live/${domain}/fullchain.pem"
 live_key="/etc/letsencrypt/live/${domain}/privkey.pem"
 
