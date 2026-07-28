@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.modules.calls.models import CallStatus, CallOutcome, Speaker
 
 
@@ -114,7 +114,7 @@ class CallResponse(BaseModel):
 
 
 class CallDetailResponse(CallResponse):
-    messages: list[CallMessageResponse] = []
+    messages: list[CallMessageResponse] = Field(default_factory=list)
     agent: Optional[AgentBrief] = None
     phone_number: Optional[PhoneNumberBrief] = None
     request: Optional[RequestBrief] = None

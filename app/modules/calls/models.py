@@ -91,7 +91,13 @@ class Call(Base):
     company: Mapped["Company"] = relationship("Company", back_populates="calls", lazy="raise")
     agent: Mapped[Optional["Agent"]] = relationship("Agent", back_populates="calls", lazy="raise")
     phone_number_obj: Mapped[Optional["PhoneNumber"]] = relationship("PhoneNumber", back_populates="calls", lazy="raise")
-    messages: Mapped[list] = relationship("CallMessage", back_populates="call", order_by="CallMessage.sequence", lazy="raise")
+    messages: Mapped[list["CallMessage"]] = relationship(
+        "CallMessage",
+        back_populates="call",
+        order_by="CallMessage.sequence",
+        lazy="raise",
+        uselist=True,
+    )
     request: Mapped[Optional["Request"]] = relationship("Request", back_populates="call", uselist=False, lazy="raise")
 
 

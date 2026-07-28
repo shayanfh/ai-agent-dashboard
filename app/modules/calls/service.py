@@ -69,6 +69,7 @@ class CallService:
         call = await self.repo.get_by_id_and_company(call_id, company_id)
         if not call:
             raise NotFoundError("Call not found")
+
         return CallDetailResponse.model_validate(call)
 
     async def create_call(self, data: CallCreate, current_user: CurrentUser) -> CallResponse:

@@ -35,6 +35,7 @@ async def test_get_call(client: AsyncClient, call_a: Call, admin_a_token: str):
     data = response.json()
     assert data["id"] == str(call_a.id)
     assert data["caller_number"] == "+96891000001"
+    assert data["messages"] == []
 
 
 @pytest.mark.asyncio
