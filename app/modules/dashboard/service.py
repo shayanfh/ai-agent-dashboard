@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, Date
+from sqlalchemy import select, func
 from app.core.dependencies import CurrentUser
 from app.core.exceptions import PermissionDeniedError
 from app.modules.calls.models import Call, CallStatus, CallOutcome
@@ -118,7 +118,7 @@ class DashboardService:
         company_id = self._get_company_id(current_user)
         since = datetime.now(timezone.utc) - timedelta(days=days)
 
-        date_col = cast(Call.started_at, Date).label("date")
+        date_col = func.date(Call.started_at).label("date")
         result = await self.db.execute(
             select(
                 date_col,
