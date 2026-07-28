@@ -40,7 +40,7 @@ from sqlalchemy.types import TypeDecorator
 from app.core.database import Base, get_db  # noqa: E402 – must come after models
 from app.core.permissions import UserRole
 from app.core.security import create_access_token, hash_password
-from app.main import app  # noqa: E402
+from app.main import app as fastapi_app  # noqa: E402
 from app.modules.agents.models import Agent, AgentStatus
 from app.modules.calls.models import Call, CallOutcome, CallStatus
 from app.modules.companies.models import Company, CompanyStatus
@@ -159,12 +159,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db():
         yield db_session
 
-    app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=fastapi_app), base_url="http://test"
     ) as ac:
         yield ac
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
