@@ -358,6 +358,32 @@ picked up without recreating the stack.
 
 ## Project Structure
 
+## Super Admin client overview
+
+Super Admin accounts can inspect cross-company package and usage data without a
+tenant/company context:
+
+```http
+GET /api/v1/admin/clients?page=1&page_size=20
+GET /api/v1/admin/clients/{company_id}
+GET /api/v1/admin/plans
+PATCH /api/v1/admin/clients/{company_id}/subscription
+```
+
+The client report includes agent and integration counts, the assigned package,
+and UTC calendar-month call minutes used and remaining. A package can be
+assigned with:
+
+```json
+{
+  "plan_id": "00000000-0000-0000-0000-000000000102",
+  "status": "active"
+}
+```
+
+Default package limits are seeded by migration `0003_billing_admin`; adjust
+them in the `plans` table to match the commercial pricing rules.
+
 ```
 app/
 ├── main.py                    — FastAPI application, router registration

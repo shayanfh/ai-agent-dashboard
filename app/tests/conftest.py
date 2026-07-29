@@ -53,6 +53,7 @@ import app.modules.requests.models  # noqa: F401
 import app.modules.knowledge_base.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.onboarding.models  # noqa: F401
+from app.modules.billing.models import Plan  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +135,38 @@ async def create_tables():
     """Create all tables once per session; drop them on teardown."""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            Plan.__table__.insert(),
+            [
+                {
+                    "id": uuid.UUID("00000000-0000-0000-0000-000000000100"),
+                    "name": "Legacy",
+                    "slug": "legacy",
+                    "monthly_minutes": None,
+                    "max_agents": None,
+                    "max_integrations": None,
+                    "is_active": True,
+                },
+                {
+                    "id": uuid.UUID("00000000-0000-0000-0000-000000000101"),
+                    "name": "Trial",
+                    "slug": "trial",
+                    "monthly_minutes": 200,
+                    "max_agents": 1,
+                    "max_integrations": 1,
+                    "is_active": True,
+                },
+                {
+                    "id": uuid.UUID("00000000-0000-0000-0000-000000000102"),
+                    "name": "Starter",
+                    "slug": "starter",
+                    "monthly_minutes": 500,
+                    "max_agents": 2,
+                    "max_integrations": 2,
+                    "is_active": True,
+                },
+            ],
+        )
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

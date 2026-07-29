@@ -16,6 +16,7 @@ from app.modules.agents.models import Agent, AgentStatus
 from app.modules.auth.models import AuthToken, AuthTokenType
 from app.modules.auth.service import AuthService
 from app.modules.companies.models import Company, CompanyStatus
+from app.modules.billing.models import Plan, Subscription, SubscriptionStatus
 from app.modules.onboarding.models import (
     TelephonyConnection,
     TelephonyConnectionStatus,
@@ -98,6 +99,12 @@ async def test_successful_signup_is_atomic_and_normalizes_email(
     assert user.email_verified is False
     assert company.status == CompanyStatus.PENDING_VERIFICATION
     assert company.country == "OM"
+    subscription = await db_session.scalar(
+        select(Subscription).where(Subscription.company_id == company.id)
+    )
+    trial_plan = await db_session.get(Plan, subscription.plan_id)
+    assert subscription.status == SubscriptionStatus.TRIAL
+    assert trial_plan.slug == "trial"
     assert token_count == 1
     assert captured_emails[-1]["template"] == "verification_email"
     assert captured_emails[-1]["token"]

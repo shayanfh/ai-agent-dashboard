@@ -35,6 +35,7 @@ from app.modules.auth.schemas import (
     VerifyEmailResponse,
 )
 from app.modules.companies.models import Company, CompanyStatus
+from app.modules.billing.models import Plan, Subscription, SubscriptionStatus
 from app.modules.users.models import User
 from jose import JWTError
 
@@ -101,6 +102,20 @@ class AuthService:
             )
             self.db.add(company)
             await self.db.flush()
+
+            trial_plan = await self.db.scalar(select(Plan).where(Plan.slug == "trial"))
+            if not trial_plan:
+                raise ValidationError("Trial plan is not configured")
+            now = datetime.now(timezone.utc)
+            self.db.add(
+                Subscription(
+                    company_id=company.id,
+                    plan_id=trial_plan.id,
+                    status=SubscriptionStatus.TRIAL,
+                    current_period_start=now,
+                    current_period_end=now + timedelta(days=settings.TRIAL_DAYS),
+                )
+            )
 
             user = User(
                 company_id=company.id,
@@ -231,6 +246,12 @@ class AuthService:
             company.status = CompanyStatus.TRIAL
             company.trial_started_at = now
             company.trial_ends_at = now + timedelta(days=settings.TRIAL_DAYS)
+            subscription = await self.db.scalar(
+                select(Subscription).where(Subscription.company_id == company.id)
+            )
+            if subscription and subscription.status == SubscriptionStatus.TRIAL:
+                subscription.current_period_start = company.trial_started_at
+                subscription.current_period_end = company.trial_ends_at
         await self.db.flush()
         tokens = await self._issue_login_tokens(user)
         self._queue_email(user, "welcome_email")

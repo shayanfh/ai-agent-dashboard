@@ -1,12 +1,15 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import String, Text, JSON, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 from app.core.types import EnumByValue
+
+if TYPE_CHECKING:
+    from app.modules.billing.models import Subscription
 
 
 class CompanyStatus(str, Enum):
@@ -64,4 +67,7 @@ class Company(Base):
     )
     integrations: Mapped[list["Integration"]] = relationship(
         "Integration", back_populates="company", lazy="noload", uselist=True
+    )
+    subscription: Mapped[Optional["Subscription"]] = relationship(
+        "Subscription", back_populates="company", uselist=False, lazy="noload"
     )
