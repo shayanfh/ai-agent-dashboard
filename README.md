@@ -384,6 +384,50 @@ assigned with:
 Default package limits are seeded by migration `0003_billing_admin`; adjust
 them in the `plans` table to match the commercial pricing rules.
 
+## SMTP test
+
+Run the automated SMTP tests first. They use a fake SMTP server and verify TLS,
+authentication, sender/recipient headers, and text/HTML content without sending
+a real email:
+
+```bash
+docker compose run --rm api pytest app/tests/test_smtp_email.py -q
+```
+
+Expected result:
+
+```text
+2 passed
+```
+
+To test the real SMTP provider, configure `.env`:
+
+```dotenv
+EMAIL_PROVIDER=smtp
+EMAIL_FROM=no-reply@yourdomain.com
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_USERNAME=your-username
+SMTP_PASSWORD=your-password
+SMTP_USE_TLS=true
+```
+
+Then send one real diagnostic email:
+
+```bash
+docker compose run --rm api python -m scripts.test_smtp you@example.com
+```
+
+Expected output:
+
+```text
+SMTP accepted the test message for you@example.com.
+```
+
+This output confirms that the SMTP server accepted the message. Inbox delivery
+can still depend on the provider's SPF, DKIM, DMARC, and spam policies. Do not
+commit real SMTP credentials to Git.
+
 ```
 app/
 ├── main.py                    — FastAPI application, router registration
