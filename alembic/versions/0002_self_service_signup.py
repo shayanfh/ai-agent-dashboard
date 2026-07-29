@@ -1,7 +1,7 @@
 """Add self-service signup, verification, and onboarding.
 
 Revision ID: 0002_self_service_signup
-Revises: 0001_initial_schema
+Revises: 0001
 """
 
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0002_self_service_signup"
-down_revision: Union[str, None] = "0001_initial_schema"
+down_revision: Union[str, None] = "0001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
