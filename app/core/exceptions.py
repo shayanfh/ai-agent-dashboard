@@ -31,6 +31,24 @@ class AuthenticationError(AppException):
         super().__init__(status.HTTP_401_UNAUTHORIZED, "AUTHENTICATION_ERROR", message)
 
 
+class EmailNotVerifiedError(AppException):
+    def __init__(self):
+        super().__init__(
+            status.HTTP_403_FORBIDDEN,
+            "EMAIL_NOT_VERIFIED",
+            "Please verify your email before signing in.",
+        )
+
+
+class RateLimitError(AppException):
+    def __init__(self):
+        super().__init__(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "RATE_LIMITED",
+            "Too many requests. Please try again later.",
+        )
+
+
 class IntegrationError(AppException):
     def __init__(self, message: str, details=None):
         super().__init__(status.HTTP_502_BAD_GATEWAY, "INTEGRATION_ERROR", message, details)

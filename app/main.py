@@ -63,6 +63,7 @@ from app.modules.knowledge_base.router import router as kb_router
 from app.modules.integrations.router import router as integrations_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.dashboard.internal_router import router as internal_router
+from app.modules.onboarding.router import router as onboarding_router
 
 prefix = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=f"{prefix}/auth", tags=["Authentication"])
@@ -76,3 +77,4 @@ app.include_router(kb_router, prefix=f"{prefix}/knowledge-base", tags=["Knowledg
 app.include_router(integrations_router, prefix=f"{prefix}/integrations", tags=["Integrations"])
 app.include_router(dashboard_router, prefix=f"{prefix}/dashboard", tags=["Dashboard"])
 app.include_router(internal_router, prefix=f"{prefix}/internal", tags=["Internal Voice Agent API"])
+app.include_router(onboarding_router, prefix=f"{prefix}/onboarding", tags=["Onboarding"])

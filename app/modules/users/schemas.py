@@ -28,6 +28,10 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    email_verified: bool
+    email_verified_at: Optional[datetime]
+    failed_login_attempts: int
+    locked_until: Optional[datetime]
     last_login_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime

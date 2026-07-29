@@ -1,4 +1,7 @@
 import uuid
+import hashlib
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import bcrypt
@@ -58,3 +61,36 @@ def encrypt_credential(value: str) -> str:
 def decrypt_credential(encrypted_value: str) -> str:
     f = Fernet(settings.CREDENTIAL_ENCRYPTION_KEY.encode())
     return f.decrypt(encrypted_value.encode()).decode()
+
+
+def generate_secure_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_auth_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().casefold()
+
+
+def validate_password_strength(password: str) -> None:
+    from app.core.exceptions import ValidationError
+
+    failures = []
+    if len(password) < 12:
+        failures.append("at least 12 characters")
+    if not re.search(r"[A-Z]", password):
+        failures.append("an uppercase letter")
+    if not re.search(r"[a-z]", password):
+        failures.append("a lowercase letter")
+    if not re.search(r"\d", password):
+        failures.append("a number")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        failures.append("a special character")
+    if failures:
+        raise ValidationError(
+            "Password is too weak",
+            {"requirements": failures},
+        )

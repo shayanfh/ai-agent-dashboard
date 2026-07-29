@@ -256,6 +256,49 @@ Response:
 }
 ```
 
+## Self-Service Registration and Onboarding
+
+Customers can register a company and its first `company_admin` without Super
+Admin intervention:
+
+```http
+POST /api/v1/auth/signup
+POST /api/v1/auth/verify-email
+POST /api/v1/auth/resend-verification
+POST /api/v1/auth/forgot-password
+POST /api/v1/auth/reset-password
+GET  /api/v1/onboarding/status
+PATCH /api/v1/onboarding/company
+POST /api/v1/onboarding/complete
+```
+
+Signup creates the Company, first administrator, and hashed one-time
+verification token in one database transaction. The Company starts in
+`pending_verification`. Email verification returns access and refresh tokens,
+starts a 14-day trial, and changes the Company status to `trial`.
+
+Raw verification, password-reset, and refresh tokens are never stored in the
+database. Verification and reset tokens are single-use and expire. Password
+reset also revokes every active refresh token for the user.
+
+The onboarding company endpoint accepts the optional `agent_template` values
+`restaurant`, `car_rental`, `customer_support`, or `blank`. Template agents are
+created as drafts. It also accepts `phone_connection` values
+`managed_number`, `sip_trunk`, or `skip`; managed-number and SIP requests are
+stored as pending telephony connections and do not modify production telephony
+configuration.
+
+For development, `EMAIL_PROVIDER=console` writes email content to worker logs.
+For production configure `EMAIL_PROVIDER=smtp` and the `SMTP_*` environment
+variables. The Celery worker must consume the `notifications` queue.
+
+Apply the signup migration before deploying the new API:
+
+```bash
+docker compose run --rm api alembic upgrade head
+docker compose up -d --build --force-recreate api celery-worker
+```
+
 ## Domain, Nginx, and HTTPS
 
 Nginx is the public reverse proxy on ports `80` and `443`. The API itself is

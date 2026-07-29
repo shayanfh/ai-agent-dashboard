@@ -51,6 +51,8 @@ from app.modules.users.models import User
 import app.modules.integrations.models  # noqa: F401
 import app.modules.requests.models  # noqa: F401
 import app.modules.knowledge_base.models  # noqa: F401
+import app.modules.auth.models  # noqa: F401
+import app.modules.onboarding.models  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

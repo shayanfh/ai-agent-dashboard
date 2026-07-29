@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     INTERNAL_API_KEY: str = "change-internal-api-key-in-production"
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    TRIAL_DAYS: int = 14
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
+    LOGIN_LOCK_MINUTES: int = 15
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ai_agent_dashboard"
@@ -32,6 +37,16 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    # Email
+    EMAIL_PROVIDER: str = "console"
+    EMAIL_FROM: str = "no-reply@example.com"
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # Encryption
     CREDENTIAL_ENCRYPTION_KEY: str = "change-me-generate-with-fernet-keygen"

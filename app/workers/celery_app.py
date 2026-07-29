@@ -8,6 +8,7 @@ celery_app = Celery(
     include=[
         "app.workers.call_tasks",
         "app.workers.integration_tasks",
+        "app.workers.notification_tasks",
     ],
 )
 
@@ -19,9 +20,12 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     task_acks_late=True,
+    task_ignore_result=True,
+    task_publish_retry=False,
     worker_prefetch_multiplier=1,
     task_routes={
         "app.workers.integration_tasks.*": {"queue": "integrations"},
         "app.workers.call_tasks.*": {"queue": "calls"},
+        "app.workers.notification_tasks.*": {"queue": "notifications"},
     },
 )

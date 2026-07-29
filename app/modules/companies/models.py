@@ -10,9 +10,12 @@ from app.core.types import EnumByValue
 
 
 class CompanyStatus(str, Enum):
+    PENDING_VERIFICATION = "pending_verification"
+    TRIAL = "trial"
     ACTIVE = "active"
     INACTIVE = "inactive"
     SUSPENDED = "suspended"
+    CANCELLED = "cancelled"
 
 
 class Company(Base):
@@ -25,11 +28,16 @@ class Company(Base):
     default_language: Mapped[str] = mapped_column(String(10), default="en")
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
     phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     business_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[CompanyStatus] = mapped_column(
         EnumByValue(CompanyStatus, "company_status"), default=CompanyStatus.ACTIVE
     )
+    trial_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    signup_source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
