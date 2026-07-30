@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from app.core.database import get_db
 from app.core.dependencies import verify_internal_api_key
 from app.core.exceptions import NotFoundError
@@ -81,7 +81,9 @@ async def resolve_agent(
     if extension:
         query = query.where(PhoneNumber.extension == extension)
     else:
-        query = query.where(PhoneNumber.extension.is_(None))
+        query = query.where(
+            or_(PhoneNumber.extension.is_(None), PhoneNumber.extension == "")
+        )
     result = await db.execute(query)
     pn = result.scalar_one_or_none()
     if not pn:
@@ -127,7 +129,9 @@ async def create_internal_call(
     if data.extension:
         query = query.where(PhoneNumber.extension == data.extension)
     else:
-        query = query.where(PhoneNumber.extension.is_(None))
+        query = query.where(
+            or_(PhoneNumber.extension.is_(None), PhoneNumber.extension == "")
+        )
     result = await db.execute(query)
     pn = result.scalar_one_or_none()
     if not pn:

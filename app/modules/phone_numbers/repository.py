@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import func, or_, select
 from app.modules.phone_numbers.models import PhoneNumber
 
 
@@ -30,7 +30,9 @@ class PhoneNumberRepository:
         if extension:
             query = query.where(PhoneNumber.extension == extension)
         else:
-            query = query.where(PhoneNumber.extension.is_(None))
+            query = query.where(
+                or_(PhoneNumber.extension.is_(None), PhoneNumber.extension == "")
+            )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 

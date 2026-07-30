@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.modules.phone_numbers.models import ConnectionStatus
 
 
@@ -17,6 +17,14 @@ class PhoneNumberCreate(BaseModel):
     operating_hours: Optional[dict] = None
     is_enabled: bool = True
 
+    @field_validator("phone_number", "extension", mode="before")
+    @classmethod
+    def normalize_routing_value(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
 
 class PhoneNumberUpdate(BaseModel):
     phone_number: Optional[str] = None
@@ -30,6 +38,14 @@ class PhoneNumberUpdate(BaseModel):
     operating_hours: Optional[dict] = None
     connection_status: Optional[ConnectionStatus] = None
     is_enabled: Optional[bool] = None
+
+    @field_validator("phone_number", "extension", mode="before")
+    @classmethod
+    def normalize_routing_value(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
 
 class PhoneNumberResponse(BaseModel):

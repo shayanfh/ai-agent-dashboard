@@ -67,7 +67,7 @@ class PhoneNumberService:
             raise NotFoundError("Phone number not found")
         if data.agent_id:
             await self._validate_agent(data.agent_id, company_id)
-        pn = await self.repo.update(pn, data.model_dump(exclude_none=True))
+        pn = await self.repo.update(pn, data.model_dump(exclude_unset=True))
         return PhoneNumberResponse.model_validate(pn)
 
     async def delete_phone_number(self, phone_id: uuid.UUID, current_user: CurrentUser) -> None:
