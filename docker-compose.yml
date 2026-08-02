@@ -5,6 +5,8 @@ services:
       - "8000"
     env_file:
       - .env
+    environment:
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT_DOCKER:-http://minio:9000}
     depends_on:
       db:
         condition: service_healthy
@@ -107,8 +109,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minioadmin}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -117,6 +119,23 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-minioadmin}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-minioadmin}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-ai-agent-dashboard}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$STORAGE_ACCESS_KEY" "$$STORAGE_SECRET_KEY"
+        mc mb --ignore-existing "local/$$STORAGE_BUCKET"
+        mc anonymous set none "local/$$STORAGE_BUCKET"
 
 volumes:
   postgres_data:

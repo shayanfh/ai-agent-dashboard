@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,9 +57,12 @@ class Settings(BaseSettings):
 
     # Storage (MinIO / S3)
     STORAGE_ENDPOINT: str = "http://localhost:9000"
+    STORAGE_PUBLIC_ENDPOINT: str | None = None
     STORAGE_ACCESS_KEY: str = "minioadmin"
     STORAGE_SECRET_KEY: str = "minioadmin"
     STORAGE_BUCKET: str = "ai-agent-dashboard"
+    MAX_RECORDING_UPLOAD_BYTES: int = 50 * 1024 * 1024
+    RECORDING_PRESIGNED_URL_EXPIRE_SECONDS: int = 900
 
 
 @lru_cache()

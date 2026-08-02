@@ -1,13 +1,43 @@
+import io
 import uuid
-import pytest
+import wave
 from datetime import datetime, timezone
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.calls.models import Call, CallStatus, CallOutcome
+from app.core.config import settings
+from app.core.storage import get_object_storage
+from app.main import app as fastapi_app
 from app.modules.agents.models import Agent
+from app.modules.calls.models import Call, CallStatus
 from app.modules.requests.models import Request
+
+
+class FakeRecordingStorage:
+    def __init__(self):
+        self.uploaded_key = None
+
+    async def upload(self, source, *, key: str, content_type: str) -> str:
+        assert source.read(4) == b"RIFF"
+        assert content_type == "audio/wav"
+        self.uploaded_key = key
+        return f"s3://test-bucket/{key}"
+
+    async def presigned_download_url(self, *, key: str, expires_in: int) -> str:
+        return f"https://storage.test/{key}?expires={expires_in}"
+
+
+def make_wav(seconds: int = 1, frame_rate: int = 8000) -> bytes:
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(frame_rate)
+        wav_file.writeframes(b"\x00\x00" * frame_rate * seconds)
+    return output.getvalue()
 
 
 @pytest.mark.asyncio
@@ -265,3 +295,59 @@ async def test_complete_call_calculates_duration(
     duration = response.json()["call"]["duration_seconds"]
     assert duration is not None
     assert duration >= 119  # allow 1s tolerance
+
+
+@pytest.mark.asyncio
+async def test_internal_recording_update(
+    client: AsyncClient, call_a: Call, db_session: AsyncSession
+):
+    response = await client.patch(
+        f"/api/v1/internal/voice/calls/{call_a.id}/recording",
+        json={
+            "egress_id": "EG_test",
+            "recording_url": "s3://recordings/call.ogg",
+            "recording_duration_seconds": 42,
+        },
+        headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(call_a)
+    assert call_a.recording_url == "s3://recordings/call.ogg"
+    assert call_a.recording_duration_seconds == 42
+    assert call_a.metadata_["recording"]["egress_id"] == "EG_test"
+
+
+@pytest.mark.asyncio
+async def test_asterisk_recording_upload_and_presigned_download(
+    client: AsyncClient,
+    call_a: Call,
+    admin_a_token: str,
+    db_session: AsyncSession,
+):
+    linked_id = "asterisk-171234.99"
+    call_a.metadata_ = {"asterisk_linked_id": linked_id}
+    await db_session.commit()
+    storage = FakeRecordingStorage()
+    fastapi_app.dependency_overrides[get_object_storage] = lambda: storage
+    try:
+        response = await client.post(
+            "/api/v1/internal/voice/recordings/asterisk",
+            data={"linked_id": linked_id},
+            files={"recording": ("call.wav", make_wav(), "audio/wav")},
+            headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
+        )
+        assert response.status_code == 201, response.text
+        await db_session.refresh(call_a)
+        assert call_a.recording_duration_seconds == 1
+        assert call_a.recording_url.startswith("s3://test-bucket/")
+        assert call_a.metadata_["recording"]["source"] == "asterisk_mixmonitor"
+
+        download = await client.get(
+            f"/api/v1/calls/{call_a.id}/recording-url",
+            headers={"Authorization": f"Bearer {admin_a_token}"},
+        )
+        assert download.status_code == 200
+        assert download.json()["url"].startswith("https://storage.test/")
+    finally:
+        fastapi_app.dependency_overrides.pop(get_object_storage, None)

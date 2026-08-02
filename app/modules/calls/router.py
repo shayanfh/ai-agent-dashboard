@@ -1,17 +1,26 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, CurrentUser
-from app.modules.calls.models import CallStatus, CallOutcome
+from app.core.dependencies import CurrentUser, get_current_user
+from app.core.schemas import PaginatedResponse
+from app.core.storage import ObjectStorage, get_object_storage
+from app.modules.calls.models import CallOutcome, CallStatus
 from app.modules.calls.schemas import (
-    CallCreate, CallUpdate, CallCompleteRequest, CallMessageCreate,
-    CallResponse, CallDetailResponse, CallMessageResponse,
+    CallCompleteRequest,
+    CallCreate,
+    CallDetailResponse,
+    CallMessageCreate,
+    CallMessageResponse,
+    CallResponse,
+    CallUpdate,
 )
 from app.modules.calls.service import CallService
-from app.core.schemas import PaginatedResponse
 
 router = APIRouter()
 
@@ -55,6 +64,30 @@ async def get_call(
 ):
     service = CallService(db)
     return await service.get_call(call_id, current_user)
+
+
+@router.get("/{call_id}/recording-url")
+async def get_call_recording_url(
+    call_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_object_storage),
+):
+    call = await CallService(db).get_call(call_id, current_user)
+    if not call.recording_url:
+        raise HTTPException(status_code=404, detail="Call recording is not available")
+    recording = (call.metadata_ or {}).get("recording", {})
+    object_key = recording.get("object_key")
+    if object_key:
+        url = await storage.presigned_download_url(
+            key=object_key,
+            expires_in=settings.RECORDING_PRESIGNED_URL_EXPIRE_SECONDS,
+        )
+        return {
+            "url": url,
+            "expires_in_seconds": settings.RECORDING_PRESIGNED_URL_EXPIRE_SECONDS,
+        }
+    return {"url": call.recording_url, "expires_in_seconds": None}
 
 
 @router.patch("/{call_id}", response_model=CallResponse)

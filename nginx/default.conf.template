@@ -31,7 +31,8 @@ server {
     ssl_session_tickets off;
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    client_max_body_size 50m;
+    # Allows a 50 MiB recording plus multipart/form-data overhead.
+    client_max_body_size 52m;
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Content-Type-Options "nosniff" always;

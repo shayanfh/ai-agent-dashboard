@@ -222,6 +222,7 @@ GET  /api/v1/internal/voice/resolve-agent?phone_number=+96880001234
 POST /api/v1/internal/voice/calls
 POST /api/v1/internal/voice/calls/{id}/messages
 POST /api/v1/internal/voice/calls/{id}/complete
+POST /api/v1/internal/voice/recordings/asterisk
 ```
 
 All requests require the header:
@@ -229,6 +230,19 @@ All requests require the header:
 ```
 X-Internal-Api-Key: <INTERNAL_API_KEY>
 ```
+
+The Asterisk upload endpoint accepts multipart fields `linked_id` and `recording`. The linked ID
+must already be present in the Call metadata; uploaded WAV files are stored in the private
+MinIO/S3 bucket. Authenticated Dashboard clients obtain a temporary download URL from
+`GET /api/v1/calls/{id}/recording-url`.
+
+When the API runs in Docker Compose, its storage endpoint defaults to `http://minio:9000` and the
+`minio-init` one-shot service creates the private bucket. Set `STORAGE_ENDPOINT_DOCKER` only when
+Compose should use an external S3-compatible service. Recording uploads default to 50 MiB and
+temporary download links default to 900 seconds; configure them with
+`MAX_RECORDING_UPLOAD_BYTES` and `RECORDING_PRESIGNED_URL_EXPIRE_SECONDS`.
+Set `STORAGE_PUBLIC_ENDPOINT` to the browser-reachable HTTPS MinIO/S3 endpoint; it is used only to
+sign download links, while uploads continue through the private Docker endpoint.
 
 ### Resolve Agent Example
 
