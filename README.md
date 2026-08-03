@@ -241,8 +241,13 @@ When the API runs in Docker Compose, its storage endpoint defaults to `http://mi
 Compose should use an external S3-compatible service. Recording uploads default to 50 MiB and
 temporary download links default to 900 seconds; configure them with
 `MAX_RECORDING_UPLOAD_BYTES` and `RECORDING_PRESIGNED_URL_EXPIRE_SECONDS`.
-Set `STORAGE_PUBLIC_ENDPOINT` to the browser-reachable HTTPS MinIO/S3 endpoint; it is used only to
-sign download links, while uploads continue through the private Docker endpoint.
+Set `STORAGE_PUBLIC_ENDPOINT=https://api.example.com` to the browser-reachable HTTPS Nginx
+origin; when omitted, Docker Compose derives it from `DOMAIN`. It is used only to sign download
+links, while uploads continue through the private Docker endpoint. Nginx streams the bucket path
+(for example `/ai-agent-dashboard/...`) to MinIO without rewriting the signed URI and supports
+byte ranges so browser audio controls can seek within a recording. The bucket remains private and
+objects require a temporary presigned URL returned by
+`GET /api/v1/calls/{id}/recording-url`.
 
 ### Resolve Agent Example
 

@@ -4,6 +4,7 @@ set -eu
 : "${DOMAIN:?DOMAIN must be set in .env}"
 
 domain="$DOMAIN"
+storage_bucket="${STORAGE_BUCKET:-ai-agent-dashboard}"
 live_certificate="/etc/letsencrypt/live/${domain}/fullchain.pem"
 live_key="/etc/letsencrypt/live/${domain}/privkey.pem"
 
@@ -24,8 +25,8 @@ else
     fi
 fi
 
-export DOMAIN="$domain" SSL_CERTIFICATE SSL_CERTIFICATE_KEY
-envsubst '${DOMAIN} ${SSL_CERTIFICATE} ${SSL_CERTIFICATE_KEY}' \
+export DOMAIN="$domain" STORAGE_BUCKET="$storage_bucket" SSL_CERTIFICATE SSL_CERTIFICATE_KEY
+envsubst '${DOMAIN} ${STORAGE_BUCKET} ${SSL_CERTIFICATE} ${SSL_CERTIFICATE_KEY}' \
     < /etc/nginx/templates/default.conf.template \
     > /etc/nginx/conf.d/default.conf
 

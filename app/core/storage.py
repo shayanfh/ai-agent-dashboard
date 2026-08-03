@@ -4,6 +4,7 @@ from typing import BinaryIO
 
 import boto3
 from botocore.client import BaseClient
+from botocore.config import Config
 
 from app.core.config import Settings, settings
 
@@ -14,6 +15,7 @@ class ObjectStorage:
         client_options = {
             "aws_access_key_id": config.STORAGE_ACCESS_KEY,
             "aws_secret_access_key": config.STORAGE_SECRET_KEY,
+            "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),
         }
         self._client: BaseClient = boto3.client(
             "s3",

@@ -7,6 +7,7 @@ services:
       - .env
     environment:
       STORAGE_ENDPOINT: ${STORAGE_ENDPOINT_DOCKER:-http://minio:9000}
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-https://${DOMAIN}}
     depends_on:
       db:
         condition: service_healthy
@@ -29,6 +30,8 @@ services:
       - .env
     depends_on:
       api:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     ports:
       - "80:80"
@@ -106,8 +109,8 @@ services:
   minio:
     image: minio/minio:latest
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     environment:
       MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minioadmin}
