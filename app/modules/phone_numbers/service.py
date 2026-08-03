@@ -2,7 +2,8 @@ import uuid
 import math
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.exceptions import NotFoundError, PermissionDeniedError
+from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from sqlalchemy.exc import IntegrityError
 from app.core.dependencies import CurrentUser
 from app.modules.agents.models import Agent
 from app.modules.phone_numbers.models import ConnectionStatus
@@ -53,9 +54,23 @@ class PhoneNumberService:
         company_id = self._get_company_id(current_user)
         if data.agent_id:
             await self._validate_agent(data.agent_id, company_id)
+        extension = data.extension or ""
+        duplicate = await self.db.scalar(
+            select(PhoneNumber.id).where(
+                PhoneNumber.phone_number == data.phone_number,
+                PhoneNumber.extension == extension,
+            )
+        )
+        if duplicate:
+            raise ConflictError("Phone number and extension are already registered")
         pn_data = data.model_dump()
+        pn_data["extension"] = extension
         pn_data["company_id"] = company_id
-        pn = await self.repo.create(pn_data)
+        try:
+            pn = await self.repo.create(pn_data)
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ConflictError("Phone number and extension are already registered") from exc
         return PhoneNumberResponse.model_validate(pn)
 
     async def update_phone_number(self, phone_id: uuid.UUID, data: PhoneNumberUpdate, current_user: CurrentUser) -> PhoneNumberResponse:
@@ -67,7 +82,10 @@ class PhoneNumberService:
             raise NotFoundError("Phone number not found")
         if data.agent_id:
             await self._validate_agent(data.agent_id, company_id)
-        pn = await self.repo.update(pn, data.model_dump(exclude_unset=True))
+        update_data = data.model_dump(exclude_unset=True)
+        if "extension" in update_data:
+            update_data["extension"] = update_data["extension"] or ""
+        pn = await self.repo.update(pn, update_data)
         return PhoneNumberResponse.model_validate(pn)
 
     async def delete_phone_number(self, phone_id: uuid.UUID, current_user: CurrentUser) -> None:

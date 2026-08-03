@@ -65,6 +65,7 @@ from app.modules.dashboard.router import router as dashboard_router
 from app.modules.dashboard.internal_router import router as internal_router
 from app.modules.onboarding.router import router as onboarding_router
 from app.modules.admin.router import router as admin_router
+from app.modules.phone_connections.router import router as phone_connections_router
 
 prefix = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=f"{prefix}/auth", tags=["Authentication"])
@@ -80,3 +81,8 @@ app.include_router(dashboard_router, prefix=f"{prefix}/dashboard", tags=["Dashbo
 app.include_router(internal_router, prefix=f"{prefix}/internal", tags=["Internal Voice Agent API"])
 app.include_router(onboarding_router, prefix=f"{prefix}/onboarding", tags=["Onboarding"])
 app.include_router(admin_router, prefix=f"{prefix}/admin", tags=["Super Admin"])
+app.include_router(
+    phone_connections_router,
+    prefix=f"{prefix}/phone-connections",
+    tags=["Phone Connections"],
+)

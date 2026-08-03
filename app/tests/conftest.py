@@ -178,10 +178,14 @@ async def create_tables():
 
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provide a fresh database session that is rolled back after every test."""
+    """Provide a session and remove data even when an endpoint commits it."""
     async with TestSessionLocal() as session:
         yield session
         await session.rollback()
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name != "plans":
+                await session.execute(table.delete())
+        await session.commit()
 
 
 @pytest_asyncio.fixture

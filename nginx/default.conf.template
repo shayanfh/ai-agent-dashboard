@@ -44,13 +44,10 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    # Private MinIO objects are available only through presigned URLs generated
-    # by the API. Keeping the original Host header is required for S3 Signature V4.
+    # Browser downloads use presigned URLs. LiveKit Egress uses authenticated S3
+    # requests to upload recordings. Signature V4 protects every storage request.
     location /${STORAGE_BUCKET}/ {
-        limit_except GET {
-            deny all;
-        }
-
+        client_max_body_size 0;
         # No trailing slash: preserve /bucket/object exactly as it was signed.
         proxy_pass http://object_storage;
         proxy_http_version 1.1;

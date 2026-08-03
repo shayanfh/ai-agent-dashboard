@@ -78,6 +78,11 @@ docker compose exec api python -m scripts.seed
 | `CELERY_RESULT_BACKEND` | Celery backend (Redis) | — |
 | `CREDENTIAL_ENCRYPTION_KEY` | Fernet key for credentials | — |
 | `INTERNAL_API_KEY` | Key for Voice Agent internal API | — |
+| `LIVEKIT_URL` | LiveKit server URL used for SIP provisioning | — |
+| `LIVEKIT_API_KEY` | Server-side LiveKit API key | — |
+| `LIVEKIT_API_SECRET` | Server-side LiveKit API secret | — |
+| `LIVEKIT_SIP_ENDPOINT` | LiveKit SIP hostname, without `sip:` | — |
+| `LIVEKIT_AGENT_NAME` | Agent dispatched for inbound calls | `ai-agent-dashboard-inbound` |
 | `CORS_ORIGINS` | JSON list of allowed CORS origins | — |
 | `STORAGE_ENDPOINT` | MinIO / S3 endpoint | — |
 | `STORAGE_ACCESS_KEY` | Storage access key | — |
@@ -212,6 +217,44 @@ When creating an ERPNext integration, set the `configuration` JSON:
 POST /api/v1/integrations/{id}/test
 Authorization: Bearer <token>
 ```
+
+## Self-service phone connections
+
+`Phone Connections` owns provider credentials and infrastructure, while `Phone Numbers` owns
+the number-to-agent mapping. Supported providers are `generic_sip`, `twilio`, `asterisk`, and
+`managed` (managed inventory must be configured separately).
+
+Create and provision a generic SIP connection:
+
+```http
+POST /api/v1/phone-connections
+Authorization: Bearer <company-admin-token>
+Content-Type: application/json
+
+{
+  "name": "Office SIP",
+  "provider": "generic_sip",
+  "phone_number": "+96824000000",
+  "agent_id": "<agent-uuid>",
+  "sip": {"allowed_addresses": ["203.0.113.10/32"], "transport": "tcp"}
+}
+```
+
+Then call `POST /api/v1/phone-connections/{id}/provision`. The response returns the generated
+SIP URI, username, and password; store this response because secrets are not exposed by normal
+GET/list responses. For Twilio, send `account_sid`, `auth_token`, and `phone_number_sid` in the
+`twilio` object. Provisioning creates the LiveKit inbound trunk and dispatch rule and configures
+the Twilio Elastic SIP Trunk automatically.
+
+Useful lifecycle endpoints:
+
+- `GET /api/v1/phone-connections`
+- `POST /api/v1/phone-connections/{id}/test`
+- `POST /api/v1/phone-connections/{id}/disconnect`
+
+After provisioning, status is `testing`. The first successfully resolved inbound call changes it
+to `active`. Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migration
+`0004_phone_connections` using `alembic upgrade head` before deploying.
 
 ## Internal Voice Agent API
 

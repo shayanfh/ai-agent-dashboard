@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Boolean, DateTime, Index, ForeignKey, JSON
+from sqlalchemy import String, Boolean, DateTime, Index, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
@@ -25,6 +25,9 @@ class PhoneNumber(Base):
     __table_args__ = (
         Index("ix_phone_numbers_company_id", "company_id"),
         Index("ix_phone_numbers_phone_number", "phone_number"),
+        UniqueConstraint(
+            "phone_number", "extension", name="uq_phone_numbers_number_extension"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -34,8 +37,14 @@ class PhoneNumber(Base):
     agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
+    connection_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("telephony_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
     phone_number: Mapped[str] = mapped_column(String(50), nullable=False)
-    extension: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    extension: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     sip_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     livekit_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

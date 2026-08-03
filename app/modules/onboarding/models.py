@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,10 +16,20 @@ class TelephonyConnectionType(str, Enum):
     SIP_TRUNK = "sip_trunk"
 
 
+class PhoneProvider(str, Enum):
+    GENERIC_SIP = "generic_sip"
+    TWILIO = "twilio"
+    ASTERISK = "asterisk"
+    MANAGED = "managed"
+
+
 class TelephonyConnectionStatus(str, Enum):
     PENDING = "pending"
+    PROVISIONING = "provisioning"
     TESTING = "testing"
     ACTIVE = "active"
+    ERROR = "error"
+    DISCONNECTED = "disconnected"
     REJECTED = "rejected"
 
 
@@ -31,6 +41,10 @@ class TelephonyConnection(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    provider: Mapped[Optional[PhoneProvider]] = mapped_column(
+        EnumByValue(PhoneProvider, "phone_provider"), nullable=True
+    )
     connection_type: Mapped[TelephonyConnectionType] = mapped_column(
         EnumByValue(TelephonyConnectionType, "telephony_connection_type"), nullable=False
     )
@@ -39,6 +53,14 @@ class TelephonyConnection(Base):
         default=TelephonyConnectionStatus.PENDING,
     )
     configuration: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    credentials_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    livekit_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    dispatch_rule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    external_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    connected_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

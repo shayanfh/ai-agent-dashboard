@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     MAX_RECORDING_UPLOAD_BYTES: int = 50 * 1024 * 1024
     RECORDING_PRESIGNED_URL_EXPIRE_SECONDS: int = 900
 
+    # LiveKit telephony provisioning
+    LIVEKIT_URL: str = ""
+    LIVEKIT_API_KEY: str = ""
+    LIVEKIT_API_SECRET: str = ""
+    LIVEKIT_SIP_ENDPOINT: str = ""
+    LIVEKIT_AGENT_NAME: str = "ai-agent-dashboard-inbound"
+
 
 @lru_cache()
 def get_settings() -> Settings:

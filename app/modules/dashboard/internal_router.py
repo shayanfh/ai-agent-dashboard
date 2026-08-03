@@ -28,7 +28,7 @@ from app.modules.calls.models import Call, CallStatus
 from app.modules.calls.schemas import (
     CallCompleteRequest,
 )
-from app.modules.phone_numbers.models import PhoneNumber
+from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
 
 router = APIRouter()
 
@@ -90,6 +90,8 @@ class InternalMessageCreate(BaseModel):
 class InternalRecordingUpdate(BaseModel):
     egress_id: str = Field(min_length=1, max_length=255)
     recording_url: str = Field(min_length=1, max_length=4000)
+    object_key: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    source: str = Field(default="livekit_egress", pattern="^(livekit_egress|external)$")
     recording_duration_seconds: Optional[int] = Field(default=None, ge=0)
 
 
@@ -173,6 +175,18 @@ async def create_internal_call(
         metadata_=data.metadata,
     )
     db.add(call)
+    if pn.connection_id:
+        from app.modules.onboarding.models import (
+            TelephonyConnection,
+            TelephonyConnectionStatus,
+        )
+
+        connection = await db.get(TelephonyConnection, pn.connection_id)
+        if connection and connection.status != TelephonyConnectionStatus.ACTIVE:
+            connection.status = TelephonyConnectionStatus.ACTIVE
+            connection.connected_at = datetime.now(timezone.utc)
+            connection.last_error = None
+            pn.connection_status = ConnectionStatus.CONNECTED
     await db.commit()
     await db.refresh(call)
     return InternalCallResponse(
@@ -250,10 +264,17 @@ async def update_internal_call_recording(
     if not call:
         raise NotFoundError("Call not found")
 
+    if data.object_key:
+        expected_prefix = f"recordings/livekit/{call.company_id}/{call.id}"
+        if not data.object_key.startswith(expected_prefix):
+            raise HTTPException(status_code=400, detail="Invalid recording object key")
     recording_metadata = {
         "egress_id": data.egress_id,
         "status": "complete",
+        "source": data.source,
     }
+    if data.object_key:
+        recording_metadata["object_key"] = data.object_key
     call.recording_url = data.recording_url
     call.recording_duration_seconds = data.recording_duration_seconds
     call.metadata_ = {
