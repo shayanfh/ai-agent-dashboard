@@ -41,7 +41,7 @@ async def _list(number: str | None) -> int:
 async def _rules(trunk_id: str | None) -> int:
     client = _client()
     try:
-        result = await client.sip.list_sip_dispatch_rule(
+        result = await client.sip.list_dispatch_rule(
             api.ListSIPDispatchRuleRequest()
         )
         for item in result.items:

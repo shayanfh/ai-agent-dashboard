@@ -280,3 +280,44 @@ async def test_twilio_connection_configures_elastic_sip_without_exposing_token(
     assert provisioned.json()["connection"]["external_trunk_id"].startswith("TK")
     assert FakeTwilioClient.calls[0][0:2] == (account_sid, auth_token)
     assert FakeTwilioClient.calls[0][2]["phone_number_sid"] == phone_number_sid
+
+
+@pytest.mark.asyncio
+async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    agent_a: Agent,
+    admin_a_token: str,
+):
+    headers = {"Authorization": f"Bearer {admin_a_token}"}
+    created = await client.post(
+        "/api/v1/phone-connections",
+        headers=headers,
+        json={
+            "name": "Disposable SIP",
+            "provider": "generic_sip",
+            "phone_number": "+96824000004",
+            "agent_id": str(agent_a.id),
+        },
+    )
+    connection_id = uuid.UUID(created.json()["id"])
+    provisioned = await client.post(
+        f"/api/v1/phone-connections/{connection_id}/provision",
+        headers=headers,
+    )
+    phone_id = uuid.UUID(provisioned.json()["connection"]["phone_number_id"])
+
+    deleted = await client.delete(
+        f"/api/v1/phone-connections/{connection_id}", headers=headers
+    )
+
+    assert deleted.status_code == 204
+    assert FakeLiveKitProvisioner.deleted == [
+        ("ST_test_trunk", "SDR_test_dispatch")
+    ]
+    assert await db_session.get(TelephonyConnection, connection_id) is None
+    assert await db_session.get(PhoneNumber, phone_id) is None
+    missing = await client.get(
+        f"/api/v1/phone-connections/{connection_id}", headers=headers
+    )
+    assert missing.status_code == 404

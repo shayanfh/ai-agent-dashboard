@@ -143,6 +143,7 @@ class LiveKitProvisioner:
         if not trunk_id and not dispatch_rule_id:
             return
         client = self._client()
+        errors: list[Exception] = []
         try:
             if dispatch_rule_id:
                 try:
@@ -151,17 +152,25 @@ class LiveKitProvisioner:
                             sip_dispatch_rule_id=dispatch_rule_id
                         )
                     )
-                except Exception:
-                    logger.warning("Could not delete LiveKit dispatch rule", exc_info=True)
+                except api.ServerError as exc:
+                    if exc.code != api.TwirpErrorCode.NOT_FOUND:
+                        errors.append(exc)
+                except Exception as exc:  # noqa: BLE001 - surface SDK/network cleanup errors
+                    errors.append(exc)
             if trunk_id:
                 try:
                     await client.sip.delete_sip_trunk(
                         api.DeleteSIPTrunkRequest(sip_trunk_id=trunk_id)
                     )
-                except Exception:
-                    logger.warning("Could not delete LiveKit SIP trunk", exc_info=True)
+                except api.ServerError as exc:
+                    if exc.code != api.TwirpErrorCode.NOT_FOUND:
+                        errors.append(exc)
+                except Exception as exc:  # noqa: BLE001 - surface SDK/network cleanup errors
+                    errors.append(exc)
         finally:
             await client.aclose()
+        if errors:
+            raise errors[0]
 
 
 class TwilioElasticSipClient:

@@ -251,6 +251,7 @@ Useful lifecycle endpoints:
 - `GET /api/v1/phone-connections`
 - `POST /api/v1/phone-connections/{id}/test`
 - `POST /api/v1/phone-connections/{id}/disconnect`
+- `DELETE /api/v1/phone-connections/{id}` — disconnects provider resources first, then deletes the connection and number mapping
 
 After provisioning, status is `testing`. The first successfully resolved inbound call changes it
 to `active`. Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migration

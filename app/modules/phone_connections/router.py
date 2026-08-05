@@ -1,7 +1,7 @@
 # ruff: noqa: B008
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -73,3 +73,13 @@ async def disconnect_phone_connection(
     db: AsyncSession = Depends(get_db),
 ):
     return await PhoneConnectionService(db).disconnect(connection_id, current_user)
+
+
+@router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_phone_connection(
+    connection_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await PhoneConnectionService(db).delete(connection_id, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

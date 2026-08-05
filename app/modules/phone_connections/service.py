@@ -285,9 +285,13 @@ class PhoneConnectionService:
                 except Exception:
                     logger.warning("Could not roll back Twilio trunk", exc_info=True)
             if livekit_resources:
-                await livekit.delete(
-                    livekit_resources.trunk_id, livekit_resources.dispatch_rule_id
-                )
+                try:
+                    await livekit.delete(
+                        livekit_resources.trunk_id,
+                        livekit_resources.dispatch_rule_id,
+                    )
+                except Exception:
+                    logger.warning("Could not roll back LiveKit resources", exc_info=True)
             connection.status = TelephonyConnectionStatus.ERROR
             connection.last_error = f"{type(exc).__name__}: {str(exc)[:500]}"
             phone.connection_status = ConnectionStatus.ERROR
@@ -345,3 +349,22 @@ class PhoneConnectionService:
         connection.external_trunk_id = None
         await self.db.commit()
         return await self._response(connection)
+
+    async def delete(
+        self, connection_id: uuid.UUID, current_user: CurrentUser
+    ) -> None:
+        company_id = self._company_id(current_user)
+        connection = await self._get(connection_id, company_id)
+
+        # Always run the provider cleanup first. If it fails, no database row is
+        # deleted, so the operation can safely be retried.
+        await self.disconnect(connection_id, current_user)
+        connection = await self._get(connection_id, company_id)
+        phone = await self.db.scalar(
+            select(PhoneNumber).where(PhoneNumber.connection_id == connection.id)
+        )
+        if phone:
+            await self.db.delete(phone)
+            await self.db.flush()
+        await self.db.delete(connection)
+        await self.db.commit()
