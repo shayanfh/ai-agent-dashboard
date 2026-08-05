@@ -268,6 +268,17 @@ docker compose exec api python -m scripts.livekit_sip_trunks list --number +1971
 ```
 
 ```bash
+docker compose exec api python -m scripts.livekit_sip_trunks rules --trunk-id ST_rT2teHJyoaoa
+```
+
+Delete the dispatch rules bound to the trunk before the trunk itself, then provision the
+connection again:
+
+```bash
+docker compose exec api python -m scripts.livekit_sip_trunks delete-rule SDR_xxxxxxxx
+```
+
+```bash
 docker compose exec api python -m scripts.livekit_sip_trunks delete ST_rT2teHJyoaoa
 ```
 
