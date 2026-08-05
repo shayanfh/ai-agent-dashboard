@@ -293,7 +293,9 @@ class PhoneConnectionService:
             phone.connection_status = ConnectionStatus.ERROR
             phone.is_enabled = False
             await self.db.commit()
-            raise ValidationError("Phone connection provisioning failed") from exc
+            raise ValidationError(
+                f"Phone connection provisioning failed: {str(exc)[:300]}"
+            ) from exc
 
     async def test(
         self, connection_id: uuid.UUID, current_user: CurrentUser

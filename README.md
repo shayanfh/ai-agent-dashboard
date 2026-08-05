@@ -256,6 +256,21 @@ After provisioning, status is `testing`. The first successfully resolved inbound
 to `active`. Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migration
 `0004_phone_connections` using `alembic upgrade head` before deploying.
 
+### Conflicting inbound SIP trunks
+
+LiveKit refuses a second inbound trunk that serves a number already used by another trunk
+(`Conflicting inbound SIP Trunks: "ST_..." and "<new>"`). Provisioning removes leftovers created by
+the same connection, but a trunk owned by another connection — or one left behind after a database
+reset — must be inspected and removed manually:
+
+```bash
+docker compose exec api python -m scripts.livekit_sip_trunks list --number +19714361744
+```
+
+```bash
+docker compose exec api python -m scripts.livekit_sip_trunks delete ST_rT2teHJyoaoa
+```
+
 ## Internal Voice Agent API
 
 Used exclusively by the LiveKit Voice Agent service.

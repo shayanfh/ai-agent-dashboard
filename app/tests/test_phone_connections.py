@@ -12,7 +12,10 @@ from app.modules.onboarding.models import (
     TelephonyConnection,
     TelephonyConnectionStatus,
 )
-from app.modules.phone_connections.providers import LiveKitResources
+from app.modules.phone_connections.providers import (
+    LiveKitProvisioner,
+    LiveKitResources,
+)
 from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
 
 
@@ -57,6 +60,57 @@ def fake_livekit(monkeypatch):
         "app.modules.phone_connections.service.TwilioElasticSipClient",
         FakeTwilioClient,
     )
+
+
+class FakeInboundTrunk:
+    def __init__(self, trunk_id: str, numbers: list[str], metadata: str) -> None:
+        self.sip_trunk_id = trunk_id
+        self.numbers = numbers
+        self.metadata = metadata
+        self.name = trunk_id
+
+
+class FakeSipClient:
+    def __init__(self, items: list[FakeInboundTrunk]) -> None:
+        self.items = items
+        self.deleted: list[str] = []
+
+    async def list_sip_inbound_trunk(self, request):
+        return type("Result", (), {"items": self.items})()
+
+    async def delete_sip_trunk(self, request):
+        self.deleted.append(request.sip_trunk_id)
+
+
+@pytest.mark.asyncio
+async def test_stale_trunk_for_same_connection_is_replaced():
+    connection_id = str(uuid.uuid4())
+    sip = FakeSipClient(
+        [
+            FakeInboundTrunk("ST_other", ["+19990000000"], "{}"),
+            FakeInboundTrunk(
+                "ST_stale",
+                ["+19714361744"],
+                f'{{"connection_id": "{connection_id}"}}',
+            ),
+        ]
+    )
+    await LiveKitProvisioner._clear_conflicting_trunks(
+        type("Client", (), {"sip": sip})(), "+19714361744", connection_id
+    )
+    assert sip.deleted == ["ST_stale"]
+
+
+@pytest.mark.asyncio
+async def test_trunk_owned_by_another_connection_raises():
+    sip = FakeSipClient(
+        [FakeInboundTrunk("ST_rT2teHJyoaoa", ["+19714361744"], "{}")]
+    )
+    with pytest.raises(RuntimeError, match="ST_rT2teHJyoaoa"):
+        await LiveKitProvisioner._clear_conflicting_trunks(
+            type("Client", (), {"sip": sip})(), "+19714361744", str(uuid.uuid4())
+        )
+    assert sip.deleted == []
 
 
 @pytest.mark.asyncio

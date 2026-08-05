@@ -50,6 +50,7 @@ class LiveKitProvisioner:
         client = self._client()
         trunk_id: str | None = None
         try:
+            await self._clear_conflicting_trunks(client, phone_number, connection_id)
             trunk = await client.sip.create_sip_inbound_trunk(
                 api.CreateSIPInboundTrunkRequest(
                     trunk=api.SIPInboundTrunkInfo(
@@ -99,6 +100,34 @@ class LiveKitProvisioner:
             raise
         finally:
             await client.aclose()
+
+    @staticmethod
+    async def _clear_conflicting_trunks(
+        client: api.LiveKitAPI, phone_number: str, connection_id: str
+    ) -> None:
+        """LiveKit rejects two inbound trunks sharing a number; drop our leftovers."""
+        result = await client.sip.list_sip_inbound_trunk(
+            api.ListSIPInboundTrunkRequest()
+        )
+        for item in result.items:
+            if phone_number not in item.numbers:
+                continue
+            try:
+                owner = json.loads(item.metadata or "{}").get("connection_id")
+            except ValueError:
+                owner = None
+            if owner != connection_id:
+                raise RuntimeError(
+                    f"LiveKit trunk {item.sip_trunk_id} already uses {phone_number}"
+                )
+            logger.info(
+                "Removing stale LiveKit SIP trunk %s for %s",
+                item.sip_trunk_id,
+                phone_number,
+            )
+            await client.sip.delete_sip_trunk(
+                api.DeleteSIPTrunkRequest(sip_trunk_id=item.sip_trunk_id)
+            )
 
     async def exists(self, trunk_id: str) -> bool:
         client = self._client()
