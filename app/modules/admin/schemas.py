@@ -15,6 +15,8 @@ class PlanResponse(BaseModel):
     monthly_minutes: Optional[int]
     max_agents: Optional[int]
     max_integrations: Optional[int]
+    price_monthly_minor: int
+    currency: str
     is_active: bool
 
     model_config = {"from_attributes": True}
@@ -42,4 +44,3 @@ class SubscriptionUpdate(BaseModel):
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
-

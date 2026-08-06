@@ -66,6 +66,8 @@ from app.modules.dashboard.internal_router import router as internal_router
 from app.modules.onboarding.router import router as onboarding_router
 from app.modules.admin.router import router as admin_router
 from app.modules.phone_connections.router import router as phone_connections_router
+from app.modules.billing.router import router as billing_router
+from app.modules.billing.admin_router import router as admin_billing_router
 
 prefix = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=f"{prefix}/auth", tags=["Authentication"])
@@ -85,4 +87,10 @@ app.include_router(
     phone_connections_router,
     prefix=f"{prefix}/phone-connections",
     tags=["Phone Connections"],
+)
+app.include_router(billing_router, prefix=f"{prefix}/billing", tags=["Billing"])
+app.include_router(
+    admin_billing_router,
+    prefix=f"{prefix}/admin/billing",
+    tags=["Super Admin Billing"],
 )

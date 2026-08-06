@@ -473,6 +473,56 @@ assigned with:
 Default package limits are seeded by migration `0003_billing_admin`; adjust
 them in the `plans` table to match the commercial pricing rules.
 
+## Billing and subscriptions API
+
+Migration `0005_billing_invoices` adds monthly prices, pending plan changes,
+scheduled cancellation, invoices, and payment history. Monetary values use the
+smallest currency unit (`9900` means USD 99.00) to avoid floating-point errors.
+
+Tenant endpoints:
+
+```http
+GET  /api/v1/billing/plans
+GET  /api/v1/billing/subscription
+GET  /api/v1/billing/usage
+GET  /api/v1/billing/invoices
+GET  /api/v1/billing/invoices/{invoice_id}
+GET  /api/v1/billing/payments
+POST /api/v1/billing/subscription/change
+POST /api/v1/billing/subscription/cancel
+POST /api/v1/billing/subscription/resume
+```
+
+A paid plan change creates an open invoice and leaves the existing plan active.
+The pending plan becomes active only after the invoice has been paid in full.
+Free plans switch immediately. Cancellation is scheduled for the end of the
+current period and can be resumed before then.
+
+Super Admin endpoints:
+
+```http
+POST  /api/v1/admin/billing/plans
+PATCH /api/v1/admin/billing/plans/{plan_id}
+GET   /api/v1/admin/billing/invoices
+GET   /api/v1/admin/billing/invoices/{invoice_id}
+POST  /api/v1/admin/billing/invoices
+POST  /api/v1/admin/billing/invoices/{invoice_id}/payments
+POST  /api/v1/admin/billing/invoices/{invoice_id}/void
+GET   /api/v1/admin/billing/payments
+```
+
+The payment endpoint records a verified/manual or externally confirmed payment;
+it does not collect card details. Connect Stripe or another payment provider by
+verifying its webhook first and then recording the provider reference through
+this API. Reusing the same external reference is idempotent only when invoice and
+amount are identical.
+
+Apply the schema before using these endpoints:
+
+```bash
+docker compose run --rm api alembic upgrade head
+```
+
 ## SMTP test
 
 Run the automated SMTP tests first. They use a fake SMTP server and verify TLS,
