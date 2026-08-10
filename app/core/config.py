@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     INTERNAL_API_KEY: str = "change-internal-api-key-in-production"
+    WEBSITE_API_KEY: str = ""
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     TRIAL_DAYS: int = 14
@@ -42,6 +43,7 @@ class Settings(BaseSettings):
     # Email
     EMAIL_PROVIDER: str = "console"
     EMAIL_FROM: str = "no-reply@example.com"
+    WEBSITE_NOTIFICATION_EMAIL: str = ""
     SMTP_HOST: str = "localhost"
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""

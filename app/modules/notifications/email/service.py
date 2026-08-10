@@ -22,3 +22,9 @@ class EmailService:
         content = template(full_name, token) if token is not None else template(full_name)
         subject, html_body, text_body = content
         self.provider.send(recipient, subject, html_body, text_body)
+
+    def send_message(self, recipient: str, subject: str, text_body: str) -> None:
+        """Send an application-generated notification with escaped HTML."""
+        from html import escape
+
+        self.provider.send(recipient, subject, f"<pre>{escape(text_body)}</pre>", text_body)

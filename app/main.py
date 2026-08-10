@@ -68,6 +68,7 @@ from app.modules.admin.router import router as admin_router
 from app.modules.phone_connections.router import router as phone_connections_router
 from app.modules.billing.router import router as billing_router
 from app.modules.billing.admin_router import router as admin_billing_router
+from app.modules.website_forms.router import router as website_forms_router
 
 prefix = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=f"{prefix}/auth", tags=["Authentication"])
@@ -93,4 +94,9 @@ app.include_router(
     admin_billing_router,
     prefix=f"{prefix}/admin/billing",
     tags=["Super Admin Billing"],
+)
+app.include_router(
+    website_forms_router,
+    prefix=f"{prefix}/public",
+    tags=["Public Website Forms"],
 )
