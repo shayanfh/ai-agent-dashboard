@@ -13,6 +13,7 @@ from app.modules.onboarding.models import (
     TelephonyConnectionStatus,
 )
 from app.modules.phone_connections.providers import (
+    AsteriskResource,
     LiveKitProvisioner,
     LiveKitResources,
 )
@@ -47,14 +48,48 @@ class FakeTwilioClient:
         return None
 
 
+class FakeAsteriskProvisioner:
+    calls: ClassVar[list[tuple[str, dict]]] = []
+    deleted: ClassVar[list[str]] = []
+
+    async def provision(self, connection_id: str, payload: dict) -> AsteriskResource:
+        self.calls.append((connection_id, payload))
+        mode = payload["mode"]
+        return AsteriskResource(
+            resource_id=f"pc-{connection_id}",
+            state="registering" if mode == "registration" else "configured",
+            provider_setup={
+                "configured_asterisk": True,
+                "provider_action_required": mode == "ip_trunk",
+                **(
+                    {"destination_sip_uri": f"sip:{payload['phone_number']}@sip.test"}
+                    if mode == "ip_trunk"
+                    else {}
+                ),
+            },
+        )
+
+    async def status(self, resource_id: str) -> AsteriskResource:
+        return AsteriskResource(resource_id, "configured", {})
+
+    async def delete(self, resource_id: str | None) -> None:
+        if resource_id:
+            self.deleted.append(resource_id)
+
+
 @pytest.fixture(autouse=True)
 def fake_livekit(monkeypatch):
     FakeLiveKitProvisioner.deleted.clear()
-    monkeypatch.setattr(
-        "app.modules.phone_connections.service.LiveKitProvisioner",
-        FakeLiveKitProvisioner,
-    )
     monkeypatch.setattr(settings, "LIVEKIT_SIP_ENDPOINT", "test.sip.livekit.cloud")
+    monkeypatch.setattr(
+        settings, "ASTERISK_PUBLIC_SIP_URI", "sip:sip.test:5061;transport=tls"
+    )
+    FakeAsteriskProvisioner.calls.clear()
+    FakeAsteriskProvisioner.deleted.clear()
+    monkeypatch.setattr(
+        "app.modules.phone_connections.service.AsteriskProvisionerClient",
+        FakeAsteriskProvisioner,
+    )
     FakeTwilioClient.calls.clear()
     monkeypatch.setattr(
         "app.modules.phone_connections.service.TwilioElasticSipClient",
@@ -142,10 +177,10 @@ async def test_generic_sip_connection_provisions_and_returns_one_time_setup(
     )
     assert provisioned.status_code == 200, provisioned.text
     body = provisioned.json()
-    assert body["connection"]["status"] == "testing"
-    assert body["provider_setup"]["sip_uri"] == "sip:test.sip.livekit.cloud"
-    assert body["provider_setup"]["username"].startswith("mw-")
-    assert len(body["provider_setup"]["password"]) >= 24
+    assert body["connection"]["status"] == "awaiting_provider_setup"
+    assert body["provider_setup"]["gateway"] == "asterisk"
+    assert body["provider_setup"]["provider_action_required"] is True
+    assert body["provider_setup"]["destination_sip_uri"].startswith("sip:+96824000000@")
 
     connection = await db_session.get(
         TelephonyConnection, uuid.UUID(created.json()["id"])
@@ -175,6 +210,10 @@ async def test_first_inbound_call_activates_phone_connection(
             "provider": "generic_sip",
             "phone_number": "+96824000001",
             "agent_id": str(agent_a.id),
+            "sip": {
+                "mode": "ip_trunk",
+                "allowed_addresses": ["203.0.113.10/32"],
+            },
         },
     )
     await client.post(
@@ -212,6 +251,10 @@ async def test_duplicate_phone_connection_is_rejected(
         "provider": "generic_sip",
         "phone_number": "+96824000002",
         "agent_id": str(agent_a.id),
+        "sip": {
+            "mode": "ip_trunk",
+            "allowed_addresses": ["203.0.113.10/32"],
+        },
     }
     first = await client.post("/api/v1/phone-connections", headers=headers, json=payload)
     second = await client.post("/api/v1/phone-connections", headers=headers, json=payload)
@@ -234,6 +277,10 @@ async def test_other_company_cannot_read_phone_connection(
             "provider": "generic_sip",
             "phone_number": "+96824000003",
             "agent_id": str(agent_a.id),
+            "sip": {
+                "mode": "ip_trunk",
+                "allowed_addresses": ["203.0.113.10/32"],
+            },
         },
     )
     response = await client.get(
@@ -280,6 +327,48 @@ async def test_twilio_connection_configures_elastic_sip_without_exposing_token(
     assert provisioned.json()["connection"]["external_trunk_id"].startswith("TK")
     assert FakeTwilioClient.calls[0][0:2] == (account_sid, auth_token)
     assert FakeTwilioClient.calls[0][2]["phone_number_sid"] == phone_number_sid
+    assert FakeTwilioClient.calls[0][2]["target_sip_uri"] == (
+        "sip:sip.test:5061;transport=tls"
+    )
+    assert FakeAsteriskProvisioner.calls[0][1]["mode"] == "twilio"
+
+
+@pytest.mark.asyncio
+async def test_generic_sip_registration_is_configured_on_asterisk(
+    client: AsyncClient,
+    agent_a: Agent,
+    admin_a_token: str,
+):
+    headers = {"Authorization": f"Bearer {admin_a_token}"}
+    created = await client.post(
+        "/api/v1/phone-connections",
+        headers=headers,
+        json={
+            "name": "Registered provider",
+            "provider": "generic_sip",
+            "phone_number": "+96824000005",
+            "agent_id": str(agent_a.id),
+            "sip": {
+                "mode": "registration",
+                "server_uri": "sip.provider.test",
+                "auth_username": "customer100",
+                "auth_password": "provider-secret-123",
+                "transport": "tls",
+            },
+        },
+    )
+    provisioned = await client.post(
+        f"/api/v1/phone-connections/{created.json()['id']}/provision",
+        headers=headers,
+    )
+
+    assert provisioned.status_code == 200, provisioned.text
+    assert provisioned.json()["connection"]["status"] == "registering"
+    payload = FakeAsteriskProvisioner.calls[0][1]
+    assert payload["mode"] == "registration"
+    assert payload["server_uri"] == "sip.provider.test"
+    assert payload["auth_password"] == "provider-secret-123"
+    assert "provider-secret-123" not in provisioned.text
 
 
 @pytest.mark.asyncio
@@ -298,6 +387,10 @@ async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
             "provider": "generic_sip",
             "phone_number": "+96824000004",
             "agent_id": str(agent_a.id),
+            "sip": {
+                "mode": "ip_trunk",
+                "allowed_addresses": ["203.0.113.10/32"],
+            },
         },
     )
     connection_id = uuid.UUID(created.json()["id"])
@@ -312,9 +405,8 @@ async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
     )
 
     assert deleted.status_code == 204
-    assert FakeLiveKitProvisioner.deleted == [
-        ("ST_test_trunk", "SDR_test_dispatch")
-    ]
+    assert FakeLiveKitProvisioner.deleted == []
+    assert FakeAsteriskProvisioner.deleted == [f"pc-{connection_id}"]
     assert await db_session.get(TelephonyConnection, connection_id) is None
     assert await db_session.get(PhoneNumber, phone_id) is None
     missing = await client.get(

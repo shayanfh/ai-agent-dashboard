@@ -155,11 +155,6 @@ class CallService:
             "ended_at": ended_at,
             "duration_seconds": duration,
         }
-        if data.recording_url:
-            update_data["recording_url"] = data.recording_url
-        if data.recording_duration_seconds:
-            update_data["recording_duration_seconds"] = data.recording_duration_seconds
-
         call = await self.repo.update(call, update_data)
         created_request = None
 

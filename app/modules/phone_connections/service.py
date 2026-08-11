@@ -1,7 +1,6 @@
 import json
 import logging
 import math
-import secrets
 import uuid
 
 from sqlalchemy import select
@@ -21,12 +20,13 @@ from app.core.security import decrypt_credential, encrypt_credential
 from app.modules.agents.models import Agent
 from app.modules.onboarding.models import (
     PhoneProvider,
+    SipConnectionMode,
     TelephonyConnection,
     TelephonyConnectionStatus,
     TelephonyConnectionType,
 )
 from app.modules.phone_connections.providers import (
-    LiveKitProvisioner,
+    AsteriskProvisionerClient,
     TwilioElasticSipClient,
 )
 from app.modules.phone_connections.schemas import (
@@ -80,6 +80,7 @@ class PhoneConnectionService:
             livekit_trunk_id=connection.livekit_trunk_id,
             dispatch_rule_id=connection.dispatch_rule_id,
             external_trunk_id=connection.external_trunk_id,
+            asterisk_resource_id=connection.asterisk_resource_id,
             configuration=connection.configuration,
             last_error=connection.last_error,
             connected_at=connection.connected_at,
@@ -149,16 +150,30 @@ class PhoneConnectionService:
             safe_configuration = {
                 "phone_number_sid": data.twilio.phone_number_sid,
                 "twilio_account": f"{data.twilio.account_sid[:6]}...{data.twilio.account_sid[-4:]}",
-                "transport": "tcp",
+                "transport": "tls",
             }
         elif data.sip:
-            username = data.sip.auth_username or f"mw-{secrets.token_hex(8)}"
-            password = data.sip.auth_password or secrets.token_urlsafe(24)
-            credentials = {"auth_username": username, "auth_password": password}
+            credentials = {
+                key: value
+                for key, value in {
+                    "auth_username": data.sip.auth_username,
+                    "auth_password": data.sip.auth_password,
+                }.items()
+                if value
+            }
             safe_configuration = {
+                "sip_mode": data.sip.mode.value,
+                "server_uri": data.sip.server_uri,
+                "server_port": data.sip.server_port,
                 "allowed_addresses": data.sip.allowed_addresses,
                 "transport": data.sip.transport,
-                "authentication": "digest",
+                "realm": data.sip.realm,
+                "outbound_proxy": data.sip.outbound_proxy,
+                "authentication": (
+                    "provider_registration"
+                    if data.sip.mode == SipConnectionMode.REGISTRATION
+                    else "source_ip"
+                ),
             }
 
         connection = TelephonyConnection(
@@ -216,29 +231,37 @@ class PhoneConnectionService:
         connection.status = TelephonyConnectionStatus.PROVISIONING
         connection.last_error = None
         await self.db.commit()
-        livekit = LiveKitProvisioner()
+        asterisk = None
         credentials = self._credentials(connection)
-        livekit_resources = None
+        asterisk_resource = None
         external_trunk_id = None
         try:
-            livekit_resources = await livekit.provision(
-                connection_id=str(connection.id),
-                company_id=str(company_id),
-                name=connection.name or f"{connection.provider.value} {phone.phone_number}",
-                phone_number=phone.phone_number,
-                auth_username=(
-                    credentials.get("auth_username")
-                    if connection.provider != PhoneProvider.TWILIO
-                    else None
-                ),
-                auth_password=(
-                    credentials.get("auth_password")
-                    if connection.provider != PhoneProvider.TWILIO
-                    else None
-                ),
-                allowed_addresses=(connection.configuration or {}).get(
-                    "allowed_addresses", []
-                ),
+            asterisk = AsteriskProvisionerClient()
+            configuration = connection.configuration or {}
+            sip_mode = configuration.get("sip_mode") or "ip_trunk"
+            asterisk_mode = (
+                "twilio" if connection.provider == PhoneProvider.TWILIO else sip_mode
+            )
+            asterisk_resource = await asterisk.provision(
+                str(connection.id),
+                {
+                    "company_id": str(company_id),
+                    "name": connection.name
+                    or f"{connection.provider.value} {phone.phone_number}",
+                    "provider": connection.provider.value,
+                    "mode": asterisk_mode,
+                    "phone_number": phone.phone_number,
+                    "extension": phone.extension,
+                    "transport": configuration.get("transport", "tcp"),
+                    "server_uri": configuration.get("server_uri"),
+                    "server_port": configuration.get("server_port"),
+                    "allowed_addresses": configuration.get("allowed_addresses", []),
+                    "auth_username": credentials.get("auth_username"),
+                    "auth_password": credentials.get("auth_password"),
+                    "realm": configuration.get("realm"),
+                    "outbound_proxy": configuration.get("outbound_proxy"),
+                    "public_sip_uri": settings.ASTERISK_PUBLIC_SIP_URI,
+                },
             )
             if connection.provider == PhoneProvider.TWILIO:
                 external_trunk_id = await TwilioElasticSipClient(
@@ -247,30 +270,33 @@ class PhoneConnectionService:
                     connection_id=str(connection.id),
                     name=connection.name or f"Mozaic {phone.phone_number}",
                     phone_number_sid=credentials["phone_number_sid"],
+                    target_sip_uri=settings.ASTERISK_PUBLIC_SIP_URI,
                 )
 
-            connection.livekit_trunk_id = livekit_resources.trunk_id
-            connection.dispatch_rule_id = livekit_resources.dispatch_rule_id
+            connection.livekit_trunk_id = None
+            connection.dispatch_rule_id = None
             connection.external_trunk_id = external_trunk_id
-            connection.status = TelephonyConnectionStatus.TESTING
-            phone.livekit_trunk_id = livekit_resources.trunk_id
-            phone.dispatch_rule_id = livekit_resources.dispatch_rule_id
+            connection.asterisk_resource_id = asterisk_resource.resource_id
+            if asterisk_mode == SipConnectionMode.IP_TRUNK.value:
+                connection.status = TelephonyConnectionStatus.AWAITING_PROVIDER_SETUP
+            elif asterisk_mode == SipConnectionMode.REGISTRATION.value:
+                connection.status = TelephonyConnectionStatus.REGISTERING
+            else:
+                connection.status = TelephonyConnectionStatus.TESTING
+            phone.livekit_trunk_id = None
+            phone.dispatch_rule_id = None
             phone.sip_trunk_id = external_trunk_id
             phone.connection_status = ConnectionStatus.PENDING
             phone.is_enabled = True
             await self.db.commit()
 
             setup: dict = {
-                "sip_uri": f"sip:{settings.LIVEKIT_SIP_ENDPOINT}",
-                "transport": (connection.configuration or {}).get("transport", "tcp"),
+                **asterisk_resource.provider_setup,
+                "gateway": "asterisk",
+                "transport": configuration.get("transport", "tcp"),
                 "verification": "Place an inbound test call to activate the connection.",
             }
-            if connection.provider != PhoneProvider.TWILIO:
-                setup.update(
-                    username=credentials.get("auth_username"),
-                    password=credentials.get("auth_password"),
-                )
-            else:
+            if connection.provider == PhoneProvider.TWILIO:
                 setup["twilio_trunk_sid"] = external_trunk_id
                 setup["configured_automatically"] = True
             return PhoneConnectionProvisionResponse(
@@ -284,14 +310,11 @@ class PhoneConnectionService:
                     ).delete(external_trunk_id)
                 except Exception:
                     logger.warning("Could not roll back Twilio trunk", exc_info=True)
-            if livekit_resources:
+            if asterisk and asterisk_resource:
                 try:
-                    await livekit.delete(
-                        livekit_resources.trunk_id,
-                        livekit_resources.dispatch_rule_id,
-                    )
+                    await asterisk.delete(asterisk_resource.resource_id)
                 except Exception:
-                    logger.warning("Could not roll back LiveKit resources", exc_info=True)
+                    logger.warning("Could not roll back Asterisk resource", exc_info=True)
             connection.status = TelephonyConnectionStatus.ERROR
             connection.last_error = f"{type(exc).__name__}: {str(exc)[:500]}"
             phone.connection_status = ConnectionStatus.ERROR
@@ -305,20 +328,23 @@ class PhoneConnectionService:
         self, connection_id: uuid.UUID, current_user: CurrentUser
     ) -> PhoneConnectionTestResponse:
         connection = await self._get(connection_id, self._company_id(current_user))
-        if not connection.livekit_trunk_id:
+        if not connection.asterisk_resource_id:
             return PhoneConnectionTestResponse(
                 success=False,
                 status=connection.status,
                 message="Connection has not been provisioned",
             )
-        exists = await LiveKitProvisioner().exists(connection.livekit_trunk_id)
+        resource = await AsteriskProvisionerClient().status(
+            connection.asterisk_resource_id
+        )
+        success = resource.state in {"ready", "registered", "configured"}
         return PhoneConnectionTestResponse(
-            success=exists,
+            success=success,
             status=connection.status,
             message=(
-                "LiveKit trunk exists; place an inbound call for end-to-end verification"
-                if exists
-                else "LiveKit trunk was not found"
+                "Asterisk route is ready; place an inbound call for end-to-end verification"
+                if success
+                else f"Asterisk connection state: {resource.state}"
             ),
         )
 
@@ -327,13 +353,12 @@ class PhoneConnectionService:
     ) -> PhoneConnectionResponse:
         connection = await self._get(connection_id, self._company_id(current_user))
         credentials = self._credentials(connection)
-        await LiveKitProvisioner().delete(
-            connection.livekit_trunk_id, connection.dispatch_rule_id
-        )
         if connection.provider == PhoneProvider.TWILIO and connection.external_trunk_id:
             await TwilioElasticSipClient(
                 credentials["account_sid"], credentials["auth_token"]
             ).delete(connection.external_trunk_id)
+        if connection.asterisk_resource_id:
+            await AsteriskProvisionerClient().delete(connection.asterisk_resource_id)
         phone = await self.db.scalar(
             select(PhoneNumber).where(PhoneNumber.connection_id == connection.id)
         )
@@ -347,6 +372,7 @@ class PhoneConnectionService:
         connection.livekit_trunk_id = None
         connection.dispatch_rule_id = None
         connection.external_trunk_id = None
+        connection.asterisk_resource_id = None
         await self.db.commit()
         return await self._response(connection)
 

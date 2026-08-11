@@ -34,8 +34,6 @@ class CallCompleteRequest(BaseModel):
     was_transferred: bool = False
     transfer_number: Optional[str] = None
     extracted_data: Optional[dict] = None
-    recording_url: Optional[str] = None
-    recording_duration_seconds: Optional[int] = None
     ended_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
 

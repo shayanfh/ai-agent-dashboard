@@ -83,6 +83,10 @@ docker compose exec api python -m scripts.seed
 | `LIVEKIT_API_SECRET` | Server-side LiveKit API secret | — |
 | `LIVEKIT_SIP_ENDPOINT` | LiveKit SIP hostname, without `sip:` | — |
 | `LIVEKIT_AGENT_NAME` | Agent dispatched for inbound calls | `ai-agent-dashboard-inbound` |
+| `ASTERISK_PROVISIONER_URL` | Private URL of the central Asterisk provisioner | — |
+| `ASTERISK_PROVISIONER_API_KEY` | Shared secret for the provisioner API | — |
+| `ASTERISK_PUBLIC_SIP_URI` | Public Asterisk SIP URI used as the provider destination | — |
+| `ASTERISK_REQUEST_TIMEOUT_SECONDS` | Provisioner HTTP timeout | `15` |
 | `CORS_ORIGINS` | JSON list of allowed CORS origins | — |
 | `STORAGE_ENDPOINT` | MinIO / S3 endpoint | — |
 | `STORAGE_ACCESS_KEY` | Storage access key | — |
@@ -221,8 +225,9 @@ Authorization: Bearer <token>
 ## Self-service phone connections
 
 `Phone Connections` owns provider credentials and infrastructure, while `Phone Numbers` owns
-the number-to-agent mapping. Supported providers are `generic_sip`, `twilio`, `asterisk`, and
-`managed` (managed inventory must be configured separately).
+the number-to-agent mapping. Every customer call follows the same route: provider -> central
+Asterisk -> central LiveKit SIP trunk -> Voice Agent. Customers select `twilio` or `generic_sip`;
+`asterisk` is the platform gateway and is not a customer provider option.
 
 Create and provision a generic SIP connection:
 
@@ -236,15 +241,37 @@ Content-Type: application/json
   "provider": "generic_sip",
   "phone_number": "+96824000000",
   "agent_id": "<agent-uuid>",
-  "sip": {"allowed_addresses": ["203.0.113.10/32"], "transport": "tcp"}
+  "sip": {
+    "mode": "ip_trunk",
+    "allowed_addresses": ["203.0.113.10/32"],
+    "transport": "tcp"
+  }
 }
 ```
 
-Then call `POST /api/v1/phone-connections/{id}/provision`. The response returns the generated
-SIP URI, username, and password; store this response because secrets are not exposed by normal
-GET/list responses. For Twilio, send `account_sid`, `auth_token`, and `phone_number_sid` in the
-`twilio` object. Provisioning creates the LiveKit inbound trunk and dispatch rule and configures
-the Twilio Elastic SIP Trunk automatically.
+Then call `POST /api/v1/phone-connections/{id}/provision`. In `ip_trunk` mode our Asterisk is
+configured automatically and the response returns `provider_setup.destination_sip_uri`; the
+customer only configures that destination in the provider panel. `allowed_addresses` must contain
+the provider's signaling IP/CIDR ranges.
+
+For providers that support outbound registration, use the fully automatic mode on our side:
+
+```json
+{
+  "sip": {
+    "mode": "registration",
+    "server_uri": "sip:provider.example.com",
+    "server_port": 5061,
+    "auth_username": "customer-user",
+    "auth_password": "customer-password",
+    "transport": "tls"
+  }
+}
+```
+
+For Twilio, send `account_sid`, `auth_token`, and `phone_number_sid` in the `twilio` object.
+Provisioning configures the Twilio Elastic SIP Trunk with Asterisk as its Origination URI. Normal
+GET/list responses never expose provider secrets.
 
 Useful lifecycle endpoints:
 
@@ -253,16 +280,18 @@ Useful lifecycle endpoints:
 - `POST /api/v1/phone-connections/{id}/disconnect`
 - `DELETE /api/v1/phone-connections/{id}` — disconnects provider resources first, then deletes the connection and number mapping
 
-After provisioning, status is `testing`. The first successfully resolved inbound call changes it
-to `active`. Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migration
-`0004_phone_connections` using `alembic upgrade head` before deploying.
+`ip_trunk` initially becomes `awaiting_provider_setup`, registration becomes `registering`, and
+Twilio becomes `testing`. A successful test or first resolved inbound call activates the mapping.
+Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migration
+`0007_asterisk_gateway` using `alembic upgrade head` before deploying.
 
-### Conflicting inbound SIP trunks
+### Cleaning up legacy per-number LiveKit trunks
 
-LiveKit refuses a second inbound trunk that serves a number already used by another trunk
-(`Conflicting inbound SIP Trunks: "ST_..." and "<new>"`). Provisioning removes leftovers created by
-the same connection, but a trunk owned by another connection — or one left behind after a database
-reset — must be inspected and removed manually:
+The Asterisk-first flow uses one central LiveKit trunk and does not create customer trunks. If the
+installation previously used per-number LiveKit provisioning, LiveKit may still refuse a duplicate
+central trunk that serves a number already owned by a legacy trunk
+(`Conflicting inbound SIP Trunks: "ST_..." and "<new>"`). Inspect and remove those legacy trunks
+manually before creating the central trunk:
 
 ```bash
 docker compose exec api python -m scripts.livekit_sip_trunks list --number +19714361744

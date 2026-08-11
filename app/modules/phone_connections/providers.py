@@ -16,6 +16,73 @@ class LiveKitResources:
     dispatch_rule_id: str
 
 
+@dataclass(slots=True)
+class AsteriskResource:
+    resource_id: str
+    state: str
+    provider_setup: dict
+
+
+class AsteriskProvisionerClient:
+    def __init__(self) -> None:
+        if not all(
+            (
+                settings.ASTERISK_PROVISIONER_URL,
+                settings.ASTERISK_PROVISIONER_API_KEY,
+                settings.ASTERISK_PUBLIC_SIP_URI,
+            )
+        ):
+            raise RuntimeError("Asterisk provisioning settings are not configured")
+        self.base_url = settings.ASTERISK_PROVISIONER_URL.rstrip("/")
+        self.headers = {
+            "X-Provisioner-API-Key": settings.ASTERISK_PROVISIONER_API_KEY
+        }
+
+    async def provision(
+        self, connection_id: str, payload: dict
+    ) -> AsteriskResource:
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=settings.ASTERISK_REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            response = await client.put(f"/v1/connections/{connection_id}", json=payload)
+            response.raise_for_status()
+            body = response.json()
+            return AsteriskResource(
+                resource_id=body["resource_id"],
+                state=body["state"],
+                provider_setup=body.get("provider_setup") or {},
+            )
+
+    async def status(self, resource_id: str) -> AsteriskResource:
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=settings.ASTERISK_REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            response = await client.get(f"/v1/connections/{resource_id}")
+            response.raise_for_status()
+            body = response.json()
+            return AsteriskResource(
+                resource_id=body["resource_id"],
+                state=body["state"],
+                provider_setup=body.get("provider_setup") or {},
+            )
+
+    async def delete(self, resource_id: str | None) -> None:
+        if not resource_id:
+            return
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=settings.ASTERISK_REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            response = await client.delete(f"/v1/connections/{resource_id}")
+            if response.status_code not in (204, 404):
+                response.raise_for_status()
+
+
 class LiveKitProvisioner:
     def _validate_settings(self) -> None:
         if not all(
@@ -185,6 +252,7 @@ class TwilioElasticSipClient:
         connection_id: str,
         name: str,
         phone_number_sid: str,
+        target_sip_uri: str,
     ) -> str:
         domain = f"mw-{connection_id.replace('-', '')[:20]}.pstn.twilio.com"
         async with httpx.AsyncClient(
@@ -199,8 +267,8 @@ class TwilioElasticSipClient:
                 origination = await client.post(
                     f"/Trunks/{trunk_sid}/OriginationUrls",
                     data={
-                        "FriendlyName": "LiveKit SIP",
-                        "SipUrl": f"sip:{settings.LIVEKIT_SIP_ENDPOINT};transport=tcp",
+                        "FriendlyName": "Mozaic Asterisk Gateway",
+                        "SipUrl": target_sip_uri,
                         "Priority": 10,
                         "Weight": 10,
                         "Enabled": "true",

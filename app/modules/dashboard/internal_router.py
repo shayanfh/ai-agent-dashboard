@@ -87,14 +87,6 @@ class InternalMessageCreate(BaseModel):
     confidence: Optional[float] = None
 
 
-class InternalRecordingUpdate(BaseModel):
-    egress_id: str = Field(min_length=1, max_length=255)
-    recording_url: str = Field(min_length=1, max_length=4000)
-    object_key: Optional[str] = Field(default=None, min_length=1, max_length=2000)
-    source: str = Field(default="livekit_egress", pattern="^(livekit_egress|external)$")
-    recording_duration_seconds: Optional[int] = Field(default=None, ge=0)
-
-
 @router.get("/voice/resolve-agent", response_model=ResolvedAgentResponse)
 async def resolve_agent(
     phone_number: str = Query(...),
@@ -250,44 +242,6 @@ async def complete_internal_call(
     )
     service = CallService(db)
     return await service.complete_call(call_id, data, current_user)
-
-
-@router.patch("/voice/calls/{call_id}/recording")
-async def update_internal_call_recording(
-    call_id: uuid.UUID,
-    data: InternalRecordingUpdate,
-    db: AsyncSession = Depends(get_db),
-    _: None = Depends(verify_internal_api_key),
-):
-    result = await db.execute(select(Call).where(Call.id == call_id))
-    call = result.scalar_one_or_none()
-    if not call:
-        raise NotFoundError("Call not found")
-
-    if data.object_key:
-        expected_prefix = f"recordings/livekit/{call.company_id}/{call.id}"
-        if not data.object_key.startswith(expected_prefix):
-            raise HTTPException(status_code=400, detail="Invalid recording object key")
-    recording_metadata = {
-        "egress_id": data.egress_id,
-        "status": "complete",
-        "source": data.source,
-    }
-    if data.object_key:
-        recording_metadata["object_key"] = data.object_key
-    call.recording_url = data.recording_url
-    call.recording_duration_seconds = data.recording_duration_seconds
-    call.metadata_ = {
-        **(call.metadata_ or {}),
-        "recording": recording_metadata,
-    }
-    await db.commit()
-    return {
-        "call_id": str(call.id),
-        "recording_url": call.recording_url,
-        "recording_duration_seconds": call.recording_duration_seconds,
-        "egress_id": data.egress_id,
-    }
 
 
 @router.post("/voice/recordings/asterisk", status_code=201)

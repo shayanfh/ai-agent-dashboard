@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     LIVEKIT_SIP_ENDPOINT: str = ""
     LIVEKIT_AGENT_NAME: str = "ai-agent-dashboard-inbound"
 
+    # Shared Asterisk gateway provisioning
+    ASTERISK_PROVISIONER_URL: str = ""
+    ASTERISK_PROVISIONER_API_KEY: str = ""
+    ASTERISK_PUBLIC_SIP_URI: str = ""
+    ASTERISK_REQUEST_TIMEOUT_SECONDS: float = 15.0
+
 
 @lru_cache()
 def get_settings() -> Settings:

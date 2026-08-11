@@ -23,6 +23,11 @@ class PhoneProvider(str, Enum):
     MANAGED = "managed"
 
 
+class SipConnectionMode(str, Enum):
+    REGISTRATION = "registration"
+    IP_TRUNK = "ip_trunk"
+
+
 class TelephonyConnectionStatus(str, Enum):
     PENDING = "pending"
     PROVISIONING = "provisioning"
@@ -30,6 +35,8 @@ class TelephonyConnectionStatus(str, Enum):
     ACTIVE = "active"
     ERROR = "error"
     DISCONNECTED = "disconnected"
+    AWAITING_PROVIDER_SETUP = "awaiting_provider_setup"
+    REGISTERING = "registering"
     REJECTED = "rejected"
 
 
@@ -57,6 +64,7 @@ class TelephonyConnection(Base):
     livekit_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     dispatch_rule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     external_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    asterisk_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     connected_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

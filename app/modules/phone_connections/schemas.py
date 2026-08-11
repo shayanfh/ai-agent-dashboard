@@ -4,16 +4,36 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.modules.onboarding.models import PhoneProvider, TelephonyConnectionStatus
+from app.modules.onboarding.models import (
+    PhoneProvider,
+    SipConnectionMode,
+    TelephonyConnectionStatus,
+)
 
 E164_PATTERN = re.compile(r"^\+[1-9]\d{7,14}$")
 
 
 class SipConnectionConfig(BaseModel):
+    mode: SipConnectionMode = SipConnectionMode.IP_TRUNK
+    server_uri: str | None = Field(default=None, min_length=3, max_length=500)
+    server_port: int | None = Field(default=None, ge=1, le=65535)
     allowed_addresses: list[str] = Field(default_factory=list, max_length=50)
     auth_username: str | None = Field(default=None, min_length=4, max_length=100)
     auth_password: str | None = Field(default=None, min_length=12, max_length=255)
+    realm: str | None = Field(default=None, max_length=255)
+    outbound_proxy: str | None = Field(default=None, max_length=500)
     transport: str = Field(default="tcp", pattern="^(tcp|tls|udp)$")
+
+    @model_validator(mode="after")
+    def validate_mode(self) -> "SipConnectionConfig":
+        if self.mode == SipConnectionMode.REGISTRATION:
+            if not all((self.server_uri, self.auth_username, self.auth_password)):
+                raise ValueError(
+                    "registration mode requires server_uri, auth_username and auth_password"
+                )
+        elif not self.allowed_addresses:
+            raise ValueError("ip_trunk mode requires at least one provider IP/CIDR")
+        return self
 
 
 class TwilioConnectionConfig(BaseModel):
@@ -40,7 +60,12 @@ class PhoneConnectionCreate(BaseModel):
         if self.provider == PhoneProvider.TWILIO and not self.twilio:
             raise ValueError("twilio configuration is required")
         if self.provider in (PhoneProvider.GENERIC_SIP, PhoneProvider.ASTERISK):
-            self.sip = self.sip or SipConnectionConfig()
+            if self.provider == PhoneProvider.ASTERISK:
+                raise ValueError(
+                    "asterisk is the platform gateway; use generic_sip as the provider"
+                )
+            if not self.sip:
+                raise ValueError("sip configuration is required")
         if self.provider == PhoneProvider.MANAGED:
             raise ValueError("Managed-number inventory is not configured")
         return self
@@ -59,6 +84,7 @@ class PhoneConnectionResponse(BaseModel):
     livekit_trunk_id: str | None
     dispatch_rule_id: str | None
     external_trunk_id: str | None
+    asterisk_resource_id: str | None
     configuration: dict | None
     last_error: str | None
     connected_at: datetime | None
@@ -75,4 +101,3 @@ class PhoneConnectionTestResponse(BaseModel):
     success: bool
     status: TelephonyConnectionStatus
     message: str
-

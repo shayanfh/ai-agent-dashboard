@@ -298,27 +298,6 @@ async def test_complete_call_calculates_duration(
 
 
 @pytest.mark.asyncio
-async def test_internal_recording_update(
-    client: AsyncClient, call_a: Call, db_session: AsyncSession
-):
-    response = await client.patch(
-        f"/api/v1/internal/voice/calls/{call_a.id}/recording",
-        json={
-            "egress_id": "EG_test",
-            "recording_url": "s3://recordings/call.ogg",
-            "recording_duration_seconds": 42,
-        },
-        headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
-    )
-
-    assert response.status_code == 200
-    await db_session.refresh(call_a)
-    assert call_a.recording_url == "s3://recordings/call.ogg"
-    assert call_a.recording_duration_seconds == 42
-    assert call_a.metadata_["recording"]["egress_id"] == "EG_test"
-
-
-@pytest.mark.asyncio
 async def test_asterisk_recording_upload_and_presigned_download(
     client: AsyncClient,
     call_a: Call,
