@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     LIVEKIT_SIP_ENDPOINT: str = ""
     LIVEKIT_AGENT_NAME: str = "ai-agent-dashboard-inbound"
 
-    # Shared Asterisk gateway provisioning
+    # Shared FreePBX gateway provisioning (through its Asterisk engine)
     ASTERISK_PROVISIONER_URL: str = ""
     ASTERISK_PROVISIONER_API_KEY: str = ""
     ASTERISK_PUBLIC_SIP_URI: str = ""

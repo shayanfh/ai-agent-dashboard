@@ -62,7 +62,7 @@ class PhoneConnectionCreate(BaseModel):
         if self.provider in (PhoneProvider.GENERIC_SIP, PhoneProvider.ASTERISK):
             if self.provider == PhoneProvider.ASTERISK:
                 raise ValueError(
-                    "asterisk is the platform gateway; use generic_sip as the provider"
+                    "FreePBX is the platform gateway; use generic_sip as the provider"
                 )
             if not self.sip:
                 raise ValueError("sip configuration is required")

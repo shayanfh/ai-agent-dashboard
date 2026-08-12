@@ -83,7 +83,7 @@ docker compose exec api python -m scripts.seed
 | `LIVEKIT_API_SECRET` | Server-side LiveKit API secret | — |
 | `LIVEKIT_SIP_ENDPOINT` | LiveKit SIP hostname, without `sip:` | — |
 | `LIVEKIT_AGENT_NAME` | Agent dispatched for inbound calls | `ai-agent-dashboard-inbound` |
-| `ASTERISK_PROVISIONER_URL` | Private URL of the central Asterisk provisioner | — |
+| `ASTERISK_PROVISIONER_URL` | Private URL of the central FreePBX provisioner | — |
 | `ASTERISK_PROVISIONER_API_KEY` | Shared secret for the provisioner API | — |
 | `ASTERISK_PUBLIC_SIP_URI` | Public Asterisk SIP URI used as the provider destination | — |
 | `ASTERISK_REQUEST_TIMEOUT_SECONDS` | Provisioner HTTP timeout | `15` |
