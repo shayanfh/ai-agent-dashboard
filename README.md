@@ -222,17 +222,18 @@ POST /api/v1/integrations/{id}/test
 Authorization: Bearer <token>
 ```
 
-## Self-service phone connections
+## Self-service phone numbers
 
-`Phone Connections` owns provider credentials and infrastructure, while `Phone Numbers` owns
-the number-to-agent mapping. Every customer call follows the same route: provider -> central
+The dashboard and public API expose one `Phone Numbers` resource. Internally, provider credentials
+and infrastructure remain isolated from the number-to-agent mapping, but clients only need the
+returned phone-number `id`. Every customer call follows the same route: provider -> central
 Asterisk -> central LiveKit SIP trunk -> Voice Agent. Customers select `twilio` or `generic_sip`;
 `asterisk` is the platform gateway and is not a customer provider option.
 
 Create and provision a generic SIP connection:
 
 ```http
-POST /api/v1/phone-connections
+POST /api/v1/phone-numbers
 Authorization: Bearer <company-admin-token>
 Content-Type: application/json
 
@@ -249,10 +250,10 @@ Content-Type: application/json
 }
 ```
 
-Then call `POST /api/v1/phone-connections/{id}/provision`. In `ip_trunk` mode our Asterisk is
-configured automatically and the response returns `provider_setup.destination_sip_uri`; the
-customer only configures that destination in the provider panel. `allowed_addresses` must contain
-the provider's signaling IP/CIDR ranges.
+Then call `POST /api/v1/phone-numbers/{phone_number_id}/provision`. In `ip_trunk` mode our
+Asterisk is configured automatically and the response returns
+`provider_setup.destination_sip_uri`; the customer only configures that destination in the
+provider panel. `allowed_addresses` must contain the provider's signaling IP/CIDR ranges.
 
 For providers that support outbound registration, use the fully automatic mode on our side:
 
@@ -275,10 +276,16 @@ GET/list responses never expose provider secrets.
 
 Useful lifecycle endpoints:
 
-- `GET /api/v1/phone-connections`
-- `POST /api/v1/phone-connections/{id}/test`
-- `POST /api/v1/phone-connections/{id}/disconnect`
-- `DELETE /api/v1/phone-connections/{id}` — disconnects provider resources first, then deletes the connection and number mapping
+- `GET /api/v1/phone-numbers`
+- `GET /api/v1/phone-numbers/{phone_number_id}`
+- `PATCH /api/v1/phone-numbers/{phone_number_id}`
+- `POST /api/v1/phone-numbers/{phone_number_id}/test`
+- `POST /api/v1/phone-numbers/{phone_number_id}/disconnect`
+- `DELETE /api/v1/phone-numbers/{phone_number_id}` — disconnects provider resources first, then
+  deletes the connection and number mapping
+
+The former `/api/v1/phone-connections` endpoints remain available as deprecated compatibility
+aliases. New dashboard and API integrations should only use `/api/v1/phone-numbers`.
 
 `ip_trunk` initially becomes `awaiting_provider_setup`, registration becomes `registering`, and
 Twilio becomes `testing`. A successful test or first resolved inbound call activates the mapping.

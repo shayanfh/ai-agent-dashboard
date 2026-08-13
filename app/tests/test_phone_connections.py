@@ -413,3 +413,76 @@ async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
         f"/api/v1/phone-connections/{connection_id}", headers=headers
     )
     assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_phone_numbers_is_the_unified_public_telephony_api(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    agent_a: Agent,
+    admin_a_token: str,
+):
+    headers = {"Authorization": f"Bearer {admin_a_token}"}
+    created = await client.post(
+        "/api/v1/phone-numbers",
+        headers=headers,
+        json={
+            "name": "Dashboard number",
+            "provider": "generic_sip",
+            "phone_number": "+96824000006",
+            "agent_id": str(agent_a.id),
+            "sip": {
+                "mode": "ip_trunk",
+                "allowed_addresses": ["203.0.113.10/32"],
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    phone_id = uuid.UUID(body["id"])
+    connection_id = uuid.UUID(body["connection_id"])
+    assert phone_id != connection_id
+    assert body["name"] == "Dashboard number"
+    assert body["status"] == "pending"
+    assert body["provider"] == "generic_sip"
+
+    listed = await client.get("/api/v1/phone-numbers", headers=headers)
+    assert listed.status_code == 200
+    assert any(item["id"] == str(phone_id) for item in listed.json()["items"])
+
+    provisioned = await client.post(
+        f"/api/v1/phone-numbers/{phone_id}/provision", headers=headers
+    )
+    assert provisioned.status_code == 200, provisioned.text
+    assert provisioned.json()["phone_number"]["id"] == str(phone_id)
+    assert (
+        provisioned.json()["phone_number"]["status"]
+        == "awaiting_provider_setup"
+    )
+
+    tested = await client.post(
+        f"/api/v1/phone-numbers/{phone_id}/test", headers=headers
+    )
+    assert tested.status_code == 200
+    assert tested.json()["success"] is True
+
+    disconnected = await client.post(
+        f"/api/v1/phone-numbers/{phone_id}/disconnect", headers=headers
+    )
+    assert disconnected.status_code == 200
+    assert disconnected.json()["status"] == "disconnected"
+
+    deleted = await client.delete(
+        f"/api/v1/phone-numbers/{phone_id}", headers=headers
+    )
+    assert deleted.status_code == 204
+    assert await db_session.get(PhoneNumber, phone_id) is None
+    assert await db_session.get(TelephonyConnection, connection_id) is None
+
+
+def test_phone_connections_openapi_operations_are_deprecated():
+    from app.main import app
+
+    schema = app.openapi()
+    operation = schema["paths"]["/api/v1/phone-connections"]["get"]
+    assert operation["deprecated"] is True

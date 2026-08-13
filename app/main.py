@@ -87,7 +87,8 @@ app.include_router(admin_router, prefix=f"{prefix}/admin", tags=["Super Admin"])
 app.include_router(
     phone_connections_router,
     prefix=f"{prefix}/phone-connections",
-    tags=["Phone Connections"],
+    tags=["Phone Connections (Deprecated)"],
+    deprecated=True,
 )
 app.include_router(billing_router, prefix=f"{prefix}/billing", tags=["Billing"])
 app.include_router(
