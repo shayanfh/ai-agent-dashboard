@@ -69,6 +69,7 @@ from app.modules.phone_connections.router import router as phone_connections_rou
 from app.modules.billing.router import router as billing_router
 from app.modules.billing.admin_router import router as admin_billing_router
 from app.modules.website_forms.router import router as website_forms_router
+from app.modules.extensions.router import router as extensions_router
 
 prefix = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=f"{prefix}/auth", tags=["Authentication"])
@@ -76,6 +77,7 @@ app.include_router(companies_router, prefix=f"{prefix}/companies", tags=["Compan
 app.include_router(users_router, prefix=f"{prefix}/users", tags=["Users"])
 app.include_router(agents_router, prefix=f"{prefix}/agents", tags=["Agents"])
 app.include_router(phone_numbers_router, prefix=f"{prefix}/phone-numbers", tags=["Phone Numbers"])
+app.include_router(extensions_router, prefix=f"{prefix}/extensions", tags=["Extensions"])
 app.include_router(calls_router, prefix=f"{prefix}/calls", tags=["Calls"])
 app.include_router(requests_router, prefix=f"{prefix}/requests", tags=["Requests"])
 app.include_router(kb_router, prefix=f"{prefix}/knowledge-base", tags=["Knowledge Base"])

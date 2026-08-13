@@ -82,6 +82,35 @@ class AsteriskProvisionerClient:
             if response.status_code not in (204, 404):
                 response.raise_for_status()
 
+    async def provision_extension(
+        self, extension_id: str, payload: dict
+    ) -> AsteriskResource:
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=settings.ASTERISK_REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            response = await client.put(f"/v1/extensions/{extension_id}", json=payload)
+            response.raise_for_status()
+            body = response.json()
+            return AsteriskResource(
+                resource_id=body["resource_id"],
+                state=body["state"],
+                provider_setup={},
+            )
+
+    async def delete_extension(self, resource_id: str | None) -> None:
+        if not resource_id:
+            return
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=settings.ASTERISK_REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            response = await client.delete(f"/v1/extensions/{resource_id}")
+            if response.status_code not in (204, 404):
+                response.raise_for_status()
+
 
 class LiveKitProvisioner:
     def _validate_settings(self) -> None:

@@ -15,7 +15,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -29,6 +29,8 @@ from app.modules.calls.schemas import (
     CallCompleteRequest,
 )
 from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
+from app.modules.extensions.models import Extension, ExtensionStatus
+from app.modules.extensions.service import ExtensionService
 
 router = APIRouter()
 
@@ -37,7 +39,6 @@ ASTERISK_LINKED_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 class ResolveAgentRequest(BaseModel):
     phone_number: str
-    extension: Optional[str] = None
 
 
 class ResolvedAgentResponse(BaseModel):
@@ -65,7 +66,6 @@ class ResolvedAgentResponse(BaseModel):
 
 class InternalCallCreate(BaseModel):
     phone_number: str
-    extension: Optional[str] = None
     caller_number: Optional[str] = None
     livekit_room_name: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -87,10 +87,20 @@ class InternalMessageCreate(BaseModel):
     confidence: Optional[float] = None
 
 
+class TransferTargetRequest(BaseModel):
+    extension: str = Field(pattern=r"^[1-9][0-9]{1,5}$")
+
+
+class TransferTargetResponse(BaseModel):
+    extension_id: str
+    extension: str
+    display_name: str
+    sip_uri: str
+
+
 @router.get("/voice/resolve-agent", response_model=ResolvedAgentResponse)
 async def resolve_agent(
     phone_number: str = Query(...),
-    extension: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_internal_api_key),
 ):
@@ -98,12 +108,6 @@ async def resolve_agent(
         PhoneNumber.phone_number == phone_number,
         PhoneNumber.is_enabled == True,
     )
-    if extension:
-        query = query.where(PhoneNumber.extension == extension)
-    else:
-        query = query.where(
-            or_(PhoneNumber.extension.is_(None), PhoneNumber.extension == "")
-        )
     result = await db.execute(query)
     pn = result.scalar_one_or_none()
     if not pn:
@@ -146,12 +150,6 @@ async def create_internal_call(
         PhoneNumber.phone_number == data.phone_number,
         PhoneNumber.is_enabled == True,
     )
-    if data.extension:
-        query = query.where(PhoneNumber.extension == data.extension)
-    else:
-        query = query.where(
-            or_(PhoneNumber.extension.is_(None), PhoneNumber.extension == "")
-        )
     result = await db.execute(query)
     pn = result.scalar_one_or_none()
     if not pn:
@@ -186,6 +184,37 @@ async def create_internal_call(
         company_id=str(call.company_id),
         agent_id=str(call.agent_id) if call.agent_id else None,
         status=call.status.value,
+    )
+
+
+@router.post(
+    "/voice/calls/{call_id}/transfer-target",
+    response_model=TransferTargetResponse,
+)
+async def resolve_transfer_target(
+    call_id: uuid.UUID,
+    data: TransferTargetRequest,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_internal_api_key),
+):
+    call = await db.get(Call, call_id)
+    if not call:
+        raise NotFoundError("Call not found")
+    extension = await db.scalar(
+        select(Extension).where(
+            Extension.company_id == call.company_id,
+            Extension.extension == data.extension,
+            Extension.is_enabled == True,
+            Extension.status == ExtensionStatus.ACTIVE,
+        )
+    )
+    if not extension:
+        raise NotFoundError("Active extension not found")
+    return TransferTargetResponse(
+        extension_id=str(extension.id),
+        extension=extension.extension,
+        display_name=extension.display_name,
+        sip_uri=ExtensionService.transfer_uri(call.company_id, extension.extension),
     )
 
 

@@ -289,8 +289,56 @@ aliases. New dashboard and API integrations should only use `/api/v1/phone-numbe
 
 `ip_trunk` initially becomes `awaiting_provider_setup`, registration becomes `registering`, and
 Twilio becomes `testing`. A successful test or first resolved inbound call activates the mapping.
-Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migration
-`0007_asterisk_gateway` using `alembic upgrade head` before deploying.
+Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`. Apply migrations through
+`0008_employee_extensions` using `alembic upgrade head` before deploying.
+
+## Employee SIP extensions
+
+Phone numbers are public DIDs and no longer contain an `extension` field. Employee extensions are
+separate, tenant-scoped resources provisioned automatically on the shared FreePBX server.
+
+```http
+POST /api/v1/extensions
+Authorization: Bearer <company-admin-token>
+Content-Type: application/json
+
+{
+  "extension": "100",
+  "display_name": "Sales",
+  "employee_name": "Ali",
+  "transport": "udp"
+}
+```
+
+The create response contains `server`, `port`, `transport`, `username`, and a generated SIP
+password. The password is returned only on create and password rotation; list and detail responses
+never expose it. Configure those values in an employee's IP phone, Zoiper, Linphone, or MicroSIP.
+
+Lifecycle endpoints:
+
+- `GET /api/v1/extensions`
+- `PATCH /api/v1/extensions/{extension_id}`
+- `POST /api/v1/extensions/{extension_id}/rotate-password`
+- `POST /api/v1/extensions/{extension_id}/enable`
+- `POST /api/v1/extensions/{extension_id}/disable`
+- `DELETE /api/v1/extensions/{extension_id}`
+
+The same extension number may exist in different companies. FreePBX uses isolated tenant contexts,
+and the Voice Agent resolves transfers through the call's company before sending SIP REFER. It
+cannot transfer to an arbitrary SIP URI supplied by the caller.
+
+Before applying migration `0008`, verify that legacy extension-based mappings did not create the
+same DID more than once:
+
+```sql
+SELECT phone_number, COUNT(*)
+FROM phone_numbers
+GROUP BY phone_number
+HAVING COUNT(*) > 1;
+```
+
+The query must return no rows. The migration intentionally stops instead of guessing which legacy
+agent mapping should own a duplicated DID.
 
 ### Cleaning up legacy per-number LiveKit trunks
 

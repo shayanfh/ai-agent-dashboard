@@ -75,7 +75,6 @@ class PhoneConnectionService:
             provider=connection.provider,
             status=connection.status,
             phone_number=phone.phone_number if phone else None,
-            extension=phone.extension if phone else "",
             agent_id=phone.agent_id if phone else None,
             livekit_trunk_id=connection.livekit_trunk_id,
             dispatch_rule_id=connection.dispatch_rule_id,
@@ -135,13 +134,10 @@ class PhoneConnectionService:
                 raise NotFoundError("Agent not found")
 
         exists = await self.db.scalar(
-            select(PhoneNumber.id).where(
-                PhoneNumber.phone_number == data.phone_number,
-                PhoneNumber.extension == data.extension,
-            )
+            select(PhoneNumber.id).where(PhoneNumber.phone_number == data.phone_number)
         )
         if exists:
-            raise ConflictError("Phone number and extension are already connected")
+            raise ConflictError("Phone number is already connected")
 
         credentials: dict[str, str] = {}
         safe_configuration: dict = {}
@@ -193,7 +189,6 @@ class PhoneConnectionService:
                 agent_id=data.agent_id,
                 connection_id=connection.id,
                 phone_number=data.phone_number,
-                extension=data.extension,
                 provider=data.provider.value,
                 connection_status=ConnectionStatus.PENDING,
                 is_enabled=False,
@@ -203,7 +198,7 @@ class PhoneConnectionService:
             await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
-            raise ConflictError("Phone number and extension are already connected") from exc
+            raise ConflictError("Phone number is already connected") from exc
         return await self._response(connection)
 
     def _credentials(self, connection: TelephonyConnection) -> dict[str, str]:
@@ -251,7 +246,6 @@ class PhoneConnectionService:
                     "provider": connection.provider.value,
                     "mode": asterisk_mode,
                     "phone_number": phone.phone_number,
-                    "extension": phone.extension,
                     "transport": configuration.get("transport", "tcp"),
                     "server_uri": configuration.get("server_uri"),
                     "server_port": configuration.get("server_port"),

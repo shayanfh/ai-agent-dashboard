@@ -17,7 +17,6 @@ class PhoneNumberCreate(BaseModel):
     """Public phone-number input, including its optional provider connection."""
 
     phone_number: str
-    extension: str = Field(default="", max_length=20)
     agent_id: uuid.UUID | None = None
     transfer_number: str | None = None
     operating_hours: dict | None = None
@@ -27,12 +26,12 @@ class PhoneNumberCreate(BaseModel):
     sip: SipConnectionConfig | None = None
     twilio: TwilioConnectionConfig | None = None
 
-    @field_validator("phone_number", "extension", mode="before")
+    @field_validator("phone_number", mode="before")
     @classmethod
     def normalize_routing_value(cls, value: object) -> object:
         if isinstance(value, str):
             value = value.strip()
-            return value or ""
+            return value
         return value
 
     @model_validator(mode="after")
@@ -43,7 +42,6 @@ class PhoneNumberCreate(BaseModel):
                     "name": self.name or f"{self.provider.value} {self.phone_number}",
                     "provider": self.provider,
                     "phone_number": self.phone_number,
-                    "extension": self.extension,
                     "agent_id": self.agent_id,
                     "sip": self.sip,
                     "twilio": self.twilio,
@@ -62,7 +60,6 @@ class PhoneNumberCreate(BaseModel):
             name=self.name or f"{self.provider.value} {self.phone_number}",
             provider=self.provider,
             phone_number=self.phone_number,
-            extension=self.extension,
             agent_id=self.agent_id,
             sip=self.sip,
             twilio=self.twilio,
@@ -71,14 +68,13 @@ class PhoneNumberCreate(BaseModel):
 
 class PhoneNumberUpdate(BaseModel):
     phone_number: str | None = None
-    extension: str | None = None
     agent_id: uuid.UUID | None = None
     transfer_number: str | None = None
     operating_hours: dict | None = None
     is_enabled: bool | None = None
     name: str | None = Field(default=None, min_length=2, max_length=255)
 
-    @field_validator("phone_number", "extension", mode="before")
+    @field_validator("phone_number", mode="before")
     @classmethod
     def normalize_routing_value(cls, value: object) -> object:
         if isinstance(value, str):
@@ -94,7 +90,6 @@ class PhoneNumberResponse(BaseModel):
     connection_id: uuid.UUID | None
     name: str | None
     phone_number: str
-    extension: str
     provider: PhoneProvider | None
     status: TelephonyConnectionStatus
     connection_status: ConnectionStatus

@@ -1,5 +1,4 @@
 import asyncio
-import os
 from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -13,6 +12,7 @@ import app.modules.companies.models  # noqa
 import app.modules.users.models  # noqa
 import app.modules.agents.models  # noqa
 import app.modules.phone_numbers.models  # noqa
+import app.modules.extensions.models  # noqa
 import app.modules.calls.models  # noqa
 import app.modules.requests.models  # noqa
 import app.modules.knowledge_base.models  # noqa

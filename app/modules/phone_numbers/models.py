@@ -25,9 +25,7 @@ class PhoneNumber(Base):
     __table_args__ = (
         Index("ix_phone_numbers_company_id", "company_id"),
         Index("ix_phone_numbers_phone_number", "phone_number"),
-        UniqueConstraint(
-            "phone_number", "extension", name="uq_phone_numbers_number_extension"
-        ),
+        UniqueConstraint("phone_number", name="uq_phone_numbers_number"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -44,7 +42,6 @@ class PhoneNumber(Base):
         unique=True,
     )
     phone_number: Mapped[str] = mapped_column(String(50), nullable=False)
-    extension: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     sip_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     livekit_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

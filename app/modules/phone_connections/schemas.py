@@ -46,7 +46,6 @@ class PhoneConnectionCreate(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     provider: PhoneProvider
     phone_number: str = Field(min_length=8, max_length=16)
-    extension: str = Field(default="", max_length=20)
     agent_id: uuid.UUID | None = None
     sip: SipConnectionConfig | None = None
     twilio: TwilioConnectionConfig | None = None
@@ -54,7 +53,6 @@ class PhoneConnectionCreate(BaseModel):
     @model_validator(mode="after")
     def validate_provider_configuration(self) -> "PhoneConnectionCreate":
         self.phone_number = self.phone_number.strip()
-        self.extension = self.extension.strip()
         if not E164_PATTERN.fullmatch(self.phone_number):
             raise ValueError("phone_number must use E.164 format, for example +14155550100")
         if self.provider == PhoneProvider.TWILIO and not self.twilio:
@@ -79,7 +77,6 @@ class PhoneConnectionResponse(BaseModel):
     provider: PhoneProvider | None
     status: TelephonyConnectionStatus
     phone_number: str | None = None
-    extension: str = ""
     agent_id: uuid.UUID | None = None
     livekit_trunk_id: str | None
     dispatch_rule_id: str | None

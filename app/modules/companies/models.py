@@ -10,6 +10,7 @@ from app.core.types import EnumByValue
 
 if TYPE_CHECKING:
     from app.modules.billing.models import Subscription
+    from app.modules.extensions.models import Extension
 
 
 class CompanyStatus(str, Enum):
@@ -58,6 +59,9 @@ class Company(Base):
     )
     phone_numbers: Mapped[list["PhoneNumber"]] = relationship(
         "PhoneNumber", back_populates="company", lazy="noload", uselist=True
+    )
+    extensions: Mapped[list["Extension"]] = relationship(
+        "Extension", back_populates="company", lazy="noload", uselist=True
     )
     calls: Mapped[list["Call"]] = relationship(
         "Call", back_populates="company", lazy="noload", uselist=True

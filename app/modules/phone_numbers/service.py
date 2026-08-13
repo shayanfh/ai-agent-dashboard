@@ -85,7 +85,6 @@ class PhoneNumberService:
             connection_id=phone.connection_id,
             name=connection.name if connection else None,
             phone_number=phone.phone_number,
-            extension=phone.extension or "",
             provider=connection.provider if connection else phone.provider,
             status=(
                 connection.status
@@ -152,19 +151,15 @@ class PhoneNumberService:
             return await self._response(phone)
 
         duplicate = await self.db.scalar(
-            select(PhoneNumber.id).where(
-                PhoneNumber.phone_number == data.phone_number,
-                PhoneNumber.extension == data.extension,
-            )
+            select(PhoneNumber.id).where(PhoneNumber.phone_number == data.phone_number)
         )
         if duplicate:
-            raise ConflictError("Phone number and extension are already registered")
+            raise ConflictError("Phone number is already registered")
         try:
             phone = await self.repo.create(
                 {
                     "company_id": company_id,
                     "phone_number": data.phone_number,
-                    "extension": data.extension,
                     "agent_id": data.agent_id,
                     "transfer_number": data.transfer_number,
                     "operating_hours": data.operating_hours,
@@ -174,7 +169,7 @@ class PhoneNumberService:
         except IntegrityError as exc:
             await self.db.rollback()
             raise ConflictError(
-                "Phone number and extension are already registered"
+                "Phone number is already registered"
             ) from exc
         return await self._response(phone)
 
@@ -190,15 +185,11 @@ class PhoneNumberService:
             await self._validate_agent(data.agent_id, company_id)
         update_data = data.model_dump(exclude_unset=True)
         name = update_data.pop("name", None)
-        if phone.connection_id and (
-            "phone_number" in update_data or "extension" in update_data
-        ):
+        if phone.connection_id and "phone_number" in update_data:
             raise ConflictError(
-                "A provider-connected number or extension cannot be changed; "
+                "A provider-connected phone number cannot be changed; "
                 "delete and recreate the phone number"
             )
-        if "extension" in update_data:
-            update_data["extension"] = update_data["extension"] or ""
         phone = await self.repo.update(phone, update_data)
         if name is not None and phone.connection_id:
             connection = await self._get_connection(phone)
