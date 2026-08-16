@@ -1,11 +1,21 @@
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import enforce_rate_limit
+from app.modules.notifications.email.service import EmailService
 from app.modules.website_forms.schemas import (
     ContactCreate,
     DemoRequestCreate,
@@ -13,7 +23,10 @@ from app.modules.website_forms.schemas import (
     SubmissionResponse,
 )
 from app.modules.website_forms.service import WebsiteFormsService
-from app.modules.notifications.email.service import EmailService
+from app.modules.website_forms.voice_preview import (
+    VoicePreviewRequest,
+    VoicePreviewService,
+)
 
 router = APIRouter()
 
@@ -35,6 +48,28 @@ def _client_ip(request: Request) -> str:
 def _send_submission_notification(subject: str, body: str) -> None:
     if settings.WEBSITE_NOTIFICATION_EMAIL:
         EmailService().send_message(settings.WEBSITE_NOTIFICATION_EMAIL, subject, body)
+
+
+@router.post(
+    "/voice-preview",
+    responses={200: {"content": {"audio/mpeg": {}}}},
+    dependencies=[Depends(verify_website_api_key)],
+)
+async def create_voice_preview(data: VoicePreviewRequest, request: Request) -> Response:
+    await enforce_rate_limit(
+        f"website-voice-preview:{_client_ip(request)}",
+        limit=10,
+        window_seconds=3600,
+    )
+    audio = await VoicePreviewService().generate(data)
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": 'inline; filename="voice-preview.mp3"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.post(

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Public website voice preview
+    OPENAI_API_KEY: str = ""
+    TTS_PREVIEW_MODEL: str = "tts-1"
+    TTS_PREVIEW_TIMEOUT_SECONDS: float = 20.0
+
     # Encryption
     CREDENTIAL_ENCRYPTION_KEY: str = "change-me-generate-with-fernet-keygen"
 

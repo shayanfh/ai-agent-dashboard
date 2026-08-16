@@ -467,6 +467,29 @@ For development, `EMAIL_PROVIDER=console` writes email content to worker logs.
 For production configure `EMAIL_PROVIDER=smtp` and the `SMTP_*` environment
 variables. The Celery worker must consume the `notifications` queue.
 
+### Public website voice preview
+
+The website's server-side proxy can request a personalized MP3 greeting:
+
+```http
+POST /api/v1/public/voice-preview
+Authorization: Bearer <WEBSITE_API_KEY>
+Content-Type: application/json
+
+{
+  "company_name": "Acme Pizza",
+  "voice": "coral"
+}
+```
+
+The response is `audio/mpeg` and says: `Thanks for calling Acme Pizza. You're through to the AI
+agent — how can I help you today?` Supported voices are `alloy`, `ash`, `ballad`, `coral`, `echo`,
+`fable`, `onyx`, `nova`, `sage`, `shimmer`, `verse`, `marin`, and `cedar`. The fixed template cannot
+be replaced by the caller. Requests are limited to 10 per client IP per hour.
+
+Configure `OPENAI_API_KEY` and optionally `TTS_PREVIEW_MODEL` (default `tts-1`) on the Backend. Keep
+`WEBSITE_API_KEY` in the website's server-side proxy; do not embed it in browser JavaScript.
+
 Apply the signup migration before deploying the new API:
 
 ```bash
