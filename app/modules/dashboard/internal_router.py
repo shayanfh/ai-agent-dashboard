@@ -3,6 +3,7 @@ import uuid
 import wave
 from datetime import datetime, timezone
 from typing import Any, Optional
+from unicodedata import decimal
 
 from fastapi import (
     APIRouter,
@@ -14,23 +15,23 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from pydantic import AliasChoices, BaseModel, Field, field_validator
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import verify_internal_api_key
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.core.storage import ObjectStorage, get_object_storage
 from app.modules.agents.models import Agent
 from app.modules.calls.models import Call, CallStatus
 from app.modules.calls.schemas import (
     CallCompleteRequest,
 )
-from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
 from app.modules.extensions.models import Extension, ExtensionStatus
 from app.modules.extensions.service import ExtensionService
+from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
 
 router = APIRouter()
 
@@ -88,7 +89,21 @@ class InternalMessageCreate(BaseModel):
 
 
 class TransferTargetRequest(BaseModel):
-    extension: str = Field(pattern=r"^[1-9][0-9]{1,5}$")
+    target: str = Field(
+        min_length=1,
+        max_length=100,
+        validation_alias=AliasChoices("target", "extension"),
+    )
+
+    @field_validator("target")
+    @classmethod
+    def normalize_target(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Transfer target cannot be empty")
+        if normalized.isdecimal():
+            return "".join(str(decimal(character)) for character in normalized)
+        return normalized
 
 
 class TransferTargetResponse(BaseModel):
@@ -200,16 +215,36 @@ async def resolve_transfer_target(
     call = await db.get(Call, call_id)
     if not call:
         raise NotFoundError("Call not found")
-    extension = await db.scalar(
-        select(Extension).where(
-            Extension.company_id == call.company_id,
-            Extension.extension == data.extension,
-            Extension.is_enabled == True,
-            Extension.status == ExtensionStatus.ACTIVE,
-        )
+    active_target = (
+        Extension.company_id == call.company_id,
+        Extension.is_enabled.is_(True),
+        Extension.status == ExtensionStatus.ACTIVE,
     )
-    if not extension:
+    if data.target.isdigit():
+        matches = (
+            await db.scalars(
+                select(Extension).where(
+                    *active_target,
+                    Extension.extension == data.target,
+                )
+            )
+        ).all()
+    else:
+        matches = (
+            await db.scalars(
+                select(Extension).where(
+                    *active_target,
+                    func.lower(Extension.display_name) == data.target.lower(),
+                )
+            )
+        ).all()
+    if not matches:
         raise NotFoundError("Active extension not found")
+    if len(matches) > 1:
+        raise ConflictError(
+            "Multiple active extensions use this display name; use the extension number"
+        )
+    extension = matches[0]
     return TransferTargetResponse(
         extension_id=str(extension.id),
         extension=extension.extension,

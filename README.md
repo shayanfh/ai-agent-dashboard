@@ -324,8 +324,10 @@ Lifecycle endpoints:
 - `DELETE /api/v1/extensions/{extension_id}`
 
 The same extension number may exist in different companies. FreePBX uses isolated tenant contexts,
-and the Voice Agent resolves transfers through the call's company before sending SIP REFER. It
-cannot transfer to an arbitrary SIP URI supplied by the caller.
+and the Voice Agent resolves transfers by extension number or case-insensitive `display_name`
+through the call's company before sending SIP REFER. `employee_name` is not a transfer target. If
+multiple active extensions have the same display name, the caller must use the extension number.
+The caller cannot provide an arbitrary phone number or SIP URI.
 
 Before applying migration `0008`, verify that legacy extension-based mappings did not create the
 same DID more than once:

@@ -101,12 +101,44 @@ async def test_extension_credentials_lifecycle_and_transfer_target(
     target = await client.post(
         f"/api/v1/internal/voice/calls/{call_a.id}/transfer-target",
         headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
-        json={"extension": "100"},
+        json={"target": "100"},
     )
     assert target.status_code == 200, target.text
     assert target.json()["extension_id"] == str(extension_id)
     assert target.json()["sip_uri"].startswith("sip:x")
     assert target.json()["sip_uri"].endswith("@pbx.test:5061;transport=tls")
+
+    legacy_numeric_target = await client.post(
+        f"/api/v1/internal/voice/calls/{call_a.id}/transfer-target",
+        headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
+        json={"extension": "100"},
+    )
+    assert legacy_numeric_target.status_code == 200
+    assert legacy_numeric_target.json()["extension_id"] == str(extension_id)
+
+    persian_numeric_target = await client.post(
+        f"/api/v1/internal/voice/calls/{call_a.id}/transfer-target",
+        headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
+        json={"target": "۱۰۰"},
+    )
+    assert persian_numeric_target.status_code == 200
+    assert persian_numeric_target.json()["extension_id"] == str(extension_id)
+
+    target_by_name = await client.post(
+        f"/api/v1/internal/voice/calls/{call_a.id}/transfer-target",
+        headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
+        json={"target": "  sAlEs  "},
+    )
+    assert target_by_name.status_code == 200, target_by_name.text
+    assert target_by_name.json()["extension_id"] == str(extension_id)
+    assert target_by_name.json()["extension"] == "100"
+
+    employee_name_is_not_a_target = await client.post(
+        f"/api/v1/internal/voice/calls/{call_a.id}/transfer-target",
+        headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
+        json={"target": "Ali"},
+    )
+    assert employee_name_is_not_a_target.status_code == 404
 
     rotated = await client.post(
         f"/api/v1/extensions/{extension_id}/rotate-password", headers=headers_a
@@ -122,7 +154,7 @@ async def test_extension_credentials_lifecycle_and_transfer_target(
     unavailable = await client.post(
         f"/api/v1/internal/voice/calls/{call_a.id}/transfer-target",
         headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
-        json={"extension": "100"},
+        json={"target": "100"},
     )
     assert unavailable.status_code == 404
 
