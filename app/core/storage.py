@@ -1,5 +1,6 @@
 import asyncio
 from functools import lru_cache
+from io import BytesIO
 from typing import BinaryIO
 
 import boto3
@@ -42,6 +43,19 @@ class ObjectStorage:
             ExtraArgs={"ContentType": content_type},
         )
         return f"s3://{self._bucket}/{key}"
+
+    async def download(self, *, key: str) -> bytes:
+        destination = BytesIO()
+        await asyncio.to_thread(
+            self._client.download_fileobj,
+            self._bucket,
+            key,
+            destination,
+        )
+        return destination.getvalue()
+
+    async def delete(self, *, key: str) -> None:
+        await asyncio.to_thread(self._client.delete_object, Bucket=self._bucket, Key=key)
 
     async def presigned_download_url(self, *, key: str, expires_in: int) -> str:
         return await asyncio.to_thread(

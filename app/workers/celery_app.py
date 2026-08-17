@@ -6,7 +6,7 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
-        "app.workers.call_tasks",
+        "app.workers.knowledge_tasks",
         "app.workers.integration_tasks",
         "app.workers.notification_tasks",
     ],
@@ -27,5 +27,6 @@ celery_app.conf.update(
         "app.workers.integration_tasks.*": {"queue": "integrations"},
         "app.workers.call_tasks.*": {"queue": "calls"},
         "app.workers.notification_tasks.*": {"queue": "notifications"},
+        "app.workers.knowledge_tasks.*": {"queue": "knowledge"},
     },
 )

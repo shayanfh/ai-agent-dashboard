@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     STORAGE_BUCKET: str = "ai-agent-dashboard"
     MAX_RECORDING_UPLOAD_BYTES: int = 50 * 1024 * 1024
     RECORDING_PRESIGNED_URL_EXPIRE_SECONDS: int = 900
+    MAX_KNOWLEDGE_UPLOAD_BYTES: int = 20 * 1024 * 1024
+    KNOWLEDGE_CHUNK_SIZE_CHARS: int = 1400
+    KNOWLEDGE_CHUNK_OVERLAP_CHARS: int = 180
+    KNOWLEDGE_SNAPSHOT_MAX_CHARS: int = 250_000
 
     # LiveKit telephony provisioning
     LIVEKIT_URL: str = ""

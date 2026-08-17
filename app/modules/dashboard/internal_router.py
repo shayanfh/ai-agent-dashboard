@@ -16,7 +16,7 @@ from fastapi import (
     status,
 )
 from pydantic import AliasChoices, BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -25,6 +25,7 @@ from app.core.dependencies import verify_internal_api_key
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.storage import ObjectStorage, get_object_storage
 from app.modules.agents.models import Agent
+from app.modules.companies.models import Company
 from app.modules.calls.models import Call, CallStatus
 from app.modules.calls.schemas import (
     CallCompleteRequest,
@@ -32,6 +33,17 @@ from app.modules.calls.schemas import (
 from app.modules.extensions.models import Extension, ExtensionStatus
 from app.modules.extensions.service import ExtensionService
 from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
+from app.modules.knowledge_base.models import (
+    DocumentProcessingStatus,
+    KBItemStatus,
+    KnowledgeBaseItem,
+    KnowledgeChunk,
+    KnowledgeDocument,
+)
+from app.modules.knowledge_base.schemas import (
+    KnowledgeSnapshotEntry,
+    KnowledgeSnapshotResponse,
+)
 
 router = APIRouter()
 
@@ -63,6 +75,7 @@ class ResolvedAgentResponse(BaseModel):
     stt_model: Optional[str]
     llm_provider: Optional[str]
     llm_model: Optional[str]
+    knowledge_version: int
 
 
 class InternalCallCreate(BaseModel):
@@ -152,6 +165,89 @@ async def resolve_agent(
         stt_model=agent.stt_model,
         llm_provider=agent.llm_provider,
         llm_model=agent.llm_model,
+        knowledge_version=(
+            await db.scalar(
+                select(Company.knowledge_version).where(Company.id == pn.company_id)
+            )
+        )
+        or 1,
+    )
+
+
+@router.get("/voice/knowledge-snapshot", response_model=KnowledgeSnapshotResponse)
+async def knowledge_snapshot(
+    agent_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_internal_api_key),
+):
+    agent = await db.scalar(select(Agent).where(Agent.id == agent_id))
+    if not agent:
+        raise NotFoundError("Agent not found")
+    version = (
+        await db.scalar(
+            select(Company.knowledge_version).where(Company.id == agent.company_id)
+        )
+    ) or 1
+    scope = or_(
+        KnowledgeBaseItem.agent_id.is_(None),
+        KnowledgeBaseItem.agent_id == agent.id,
+    )
+    items = list(
+        await db.scalars(
+            select(KnowledgeBaseItem)
+            .where(
+                KnowledgeBaseItem.company_id == agent.company_id,
+                KnowledgeBaseItem.status == KBItemStatus.ACTIVE,
+                scope,
+            )
+            .order_by(KnowledgeBaseItem.created_at, KnowledgeBaseItem.id)
+        )
+    )
+    chunks = list(
+        await db.execute(
+            select(KnowledgeChunk, KnowledgeDocument.file_name)
+            .join(KnowledgeDocument, KnowledgeDocument.id == KnowledgeChunk.document_id)
+            .where(
+                KnowledgeChunk.company_id == agent.company_id,
+                or_(KnowledgeChunk.agent_id.is_(None), KnowledgeChunk.agent_id == agent.id),
+                KnowledgeDocument.processing_status == DocumentProcessingStatus.COMPLETED,
+            )
+            .order_by(KnowledgeDocument.created_at, KnowledgeChunk.chunk_index)
+        )
+    )
+    entries: list[KnowledgeSnapshotEntry] = []
+    total_chars = 0
+    for item in items:
+        content = f"Question: {item.question}\nAnswer: {item.answer}"
+        if total_chars + len(content) > settings.KNOWLEDGE_SNAPSHOT_MAX_CHARS:
+            break
+        entries.append(
+            KnowledgeSnapshotEntry(
+                id=str(item.id),
+                source="qa",
+                title=item.question,
+                content=content,
+                category=item.category,
+            )
+        )
+        total_chars += len(content)
+    for chunk, file_name in chunks:
+        if total_chars + len(chunk.content) > settings.KNOWLEDGE_SNAPSHOT_MAX_CHARS:
+            break
+        entries.append(
+            KnowledgeSnapshotEntry(
+                id=str(chunk.id),
+                source="document",
+                title=file_name,
+                content=chunk.content,
+            )
+        )
+        total_chars += len(chunk.content)
+    return KnowledgeSnapshotResponse(
+        company_id=str(agent.company_id),
+        agent_id=str(agent.id),
+        version=version,
+        entries=entries,
     )
 
 

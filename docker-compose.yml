@@ -76,7 +76,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
-    command: celery -A app.workers.celery_app worker --loglevel=info -Q calls,integrations,notifications
+    command: celery -A app.workers.celery_app worker --loglevel=info -Q calls,integrations,notifications,knowledge
 
   db:
     image: postgres:16-alpine

@@ -173,13 +173,52 @@ All database queries automatically filter by `company_id`. A user can never acce
 Workers handle background tasks:
 
 - **`sync_request_to_erpnext`** — Syncs completed call requests to ERPNext with retry logic (3 attempts, 120 s backoff)
-- **`process_knowledge_document`** — Processes uploaded documents (placeholder for vector embedding)
+- **`app.workers.knowledge_tasks.process_document`** — Extracts uploaded PDF, DOCX, TXT, Markdown,
+  and CSV documents, chunks their text, and publishes a new tenant knowledge version
 
 Start the worker:
 
 ```bash
-celery -A app.workers.celery_app worker --loglevel=info -Q calls,integrations
+celery -A app.workers.celery_app worker --loglevel=info -Q calls,integrations,notifications,knowledge
 # or via Docker Compose (started automatically)
+```
+
+## Knowledge Base and low-latency voice sync
+
+Knowledge can be company-wide (`agent_id=null`) or assigned to one Agent. Company admins can
+manage Q&A entries, upload documents directly to private MinIO storage, inspect processing errors,
+and retry failed documents. External document registration remains available but accepts only a
+public HTTPS URL during processing; private and loopback destinations are rejected.
+
+```http
+GET  /api/v1/knowledge-base/templates
+POST /api/v1/knowledge-base/templates/restaurant/apply
+POST /api/v1/knowledge-base/templates/car_rental/apply
+POST /api/v1/knowledge-base/documents/upload
+GET  /api/v1/knowledge-base/documents/{document_id}
+POST /api/v1/knowledge-base/documents/{document_id}/retry
+```
+
+Direct upload is multipart form data with `file` and optional `agent_id`. Supported formats are
+PDF, DOCX, TXT, Markdown, and CSV. The default maximum is 20 MiB. The worker extracts and chunks
+text; it does not execute macros, scripts, or instructions found inside documents.
+
+Restaurant and car-rental starter templates contain editable operational Q&A entries. Applying a
+template is idempotent for the selected company/Agent scope: matching questions are skipped rather
+than duplicated.
+
+Every successful Q&A mutation, completed document processing, or deletion increments
+`companies.knowledge_version`. The existing Voice Agent resolve call returns that version. Voice
+workers keep a process-wide cache keyed by `(agent_id, knowledge_version)` and download an internal
+snapshot only on a cache miss. During a call, retrieval uses an in-memory multilingual lexical and
+fuzzy vector index in LiveKit's `on_user_turn_completed` hook. It performs no Backend or embedding
+API request for each caller question and avoids the extra model round trip of a tool call.
+
+```dotenv
+MAX_KNOWLEDGE_UPLOAD_BYTES=20971520
+KNOWLEDGE_CHUNK_SIZE_CHARS=1400
+KNOWLEDGE_CHUNK_OVERLAP_CHARS=180
+KNOWLEDGE_SNAPSHOT_MAX_CHARS=250000
 ```
 
 ## ERPNext Integration
