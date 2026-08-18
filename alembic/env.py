@@ -17,6 +17,7 @@ import app.modules.calls.models  # noqa
 import app.modules.requests.models  # noqa
 import app.modules.knowledge_base.models  # noqa
 import app.modules.integrations.models  # noqa
+import app.modules.outbound_campaigns.models  # noqa
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

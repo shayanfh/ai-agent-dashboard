@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
-from app.modules.calls.models import CallStatus, CallOutcome, Speaker
+from app.modules.calls.models import CallDirection, CallStatus, CallOutcome, Speaker
 
 
 class CallCreate(BaseModel):
@@ -11,6 +11,8 @@ class CallCreate(BaseModel):
     caller_number: Optional[str] = None
     livekit_room_name: Optional[str] = None
     started_at: Optional[datetime] = None
+    direction: CallDirection = CallDirection.INBOUND
+    destination_number: Optional[str] = None
 
 
 class CallUpdate(BaseModel):
@@ -90,7 +92,11 @@ class CallResponse(BaseModel):
     company_id: uuid.UUID
     agent_id: Optional[uuid.UUID]
     phone_number_id: Optional[uuid.UUID]
+    campaign_id: Optional[uuid.UUID]
+    recipient_id: Optional[uuid.UUID]
+    direction: CallDirection
     caller_number: Optional[str]
+    destination_number: Optional[str]
     livekit_room_name: Optional[str]
     status: CallStatus
     outcome: Optional[CallOutcome]

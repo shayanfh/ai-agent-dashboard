@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     ASTERISK_PUBLIC_SIP_URI: str = ""
     ASTERISK_REQUEST_TIMEOUT_SECONDS: float = 15.0
 
+    # Outbound campaigns
+    OUTBOUND_MAX_IMPORT_ROWS: int = 10_000
+    OUTBOUND_MAX_CONCURRENCY_PER_COMPANY: int = 5
+    OUTBOUND_DISPATCH_INTERVAL_SECONDS: int = 15
+
 
 @lru_cache()
 def get_settings() -> Settings:

@@ -16,6 +16,7 @@ from app.modules.phone_connections.providers import (
     AsteriskResource,
     LiveKitProvisioner,
     LiveKitResources,
+    TwilioTrunkResource,
 )
 from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
 
@@ -40,11 +41,17 @@ class FakeTwilioClient:
         self.account_sid = account_sid
         self.auth_token = auth_token
 
-    async def provision(self, **kwargs) -> str:
+    async def provision(self, **kwargs) -> TwilioTrunkResource:
         self.calls.append((self.account_sid, self.auth_token, kwargs))
-        return "TK0123456789abcdef0123456789abcdef"
+        return TwilioTrunkResource(
+            trunk_sid="TK0123456789abcdef0123456789abcdef",
+            domain="mw-test.pstn.twilio.com",
+            credential_list_sid="CL0123456789abcdef0123456789abcdef",
+            sip_username="mw-test",
+            sip_password="generated-test-password-1234567890",
+        )
 
-    async def delete(self, trunk_sid: str) -> None:
+    async def delete(self, trunk_sid: str, credential_list_sid: str | None = None) -> None:
         return None
 
 

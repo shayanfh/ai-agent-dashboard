@@ -70,6 +70,10 @@ from app.modules.billing.router import router as billing_router
 from app.modules.billing.admin_router import router as admin_billing_router
 from app.modules.website_forms.router import router as website_forms_router
 from app.modules.extensions.router import router as extensions_router
+from app.modules.outbound_campaigns.router import (
+    internal_router as outbound_internal_router,
+    router as outbound_campaigns_router,
+)
 
 prefix = settings.API_V1_PREFIX
 app.include_router(auth_router, prefix=f"{prefix}/auth", tags=["Authentication"])
@@ -79,6 +83,16 @@ app.include_router(agents_router, prefix=f"{prefix}/agents", tags=["Agents"])
 app.include_router(phone_numbers_router, prefix=f"{prefix}/phone-numbers", tags=["Phone Numbers"])
 app.include_router(extensions_router, prefix=f"{prefix}/extensions", tags=["Extensions"])
 app.include_router(calls_router, prefix=f"{prefix}/calls", tags=["Calls"])
+app.include_router(
+    outbound_campaigns_router,
+    prefix=f"{prefix}/outbound-campaigns",
+    tags=["Outbound Campaigns"],
+)
+app.include_router(
+    outbound_internal_router,
+    prefix=f"{prefix}/internal",
+    tags=["Internal Outbound Events"],
+)
 app.include_router(requests_router, prefix=f"{prefix}/requests", tags=["Requests"])
 app.include_router(kb_router, prefix=f"{prefix}/knowledge-base", tags=["Knowledge Base"])
 app.include_router(integrations_router, prefix=f"{prefix}/integrations", tags=["Integrations"])

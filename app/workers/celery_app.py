@@ -9,6 +9,7 @@ celery_app = Celery(
         "app.workers.knowledge_tasks",
         "app.workers.integration_tasks",
         "app.workers.notification_tasks",
+        "app.workers.outbound_tasks",
     ],
 )
 
@@ -28,5 +29,12 @@ celery_app.conf.update(
         "app.workers.call_tasks.*": {"queue": "calls"},
         "app.workers.notification_tasks.*": {"queue": "notifications"},
         "app.workers.knowledge_tasks.*": {"queue": "knowledge"},
+        "app.workers.outbound_tasks.*": {"queue": "calls"},
+    },
+    beat_schedule={
+        "dispatch-due-outbound-campaigns": {
+            "task": "app.workers.outbound_tasks.dispatch_due_campaigns",
+            "schedule": settings.OUTBOUND_DISPATCH_INTERVAL_SECONDS,
+        }
     },
 )

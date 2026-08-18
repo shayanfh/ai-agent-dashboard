@@ -408,6 +408,136 @@ docker compose exec api python -m scripts.livekit_sip_trunks delete-rule SDR_xxx
 docker compose exec api python -m scripts.livekit_sip_trunks delete ST_rT2teHJyoaoa
 ```
 
+## Outbound campaigns
+
+Migration `0010_outbound_campaigns` adds tenant-scoped outbound campaigns, recipients, attempts,
+do-not-call entries, and `inbound`/`outbound` call direction. All PSTN traffic still uses the
+customer's connected Phone Number and the shared FreePBX/Asterisk gateway.
+
+Supported campaign types:
+
+- `ai_conversation`: Asterisk calls the recipient and, after answer, bridges the call to the
+  configured LiveKit Voice Agent. Contact fields are loaded once as outbound context.
+- `voice_broadcast`: the Backend generates one WAV from `message_text`, stores it in MinIO, caches
+  it on Asterisk, and Asterisk plays the same file to every answered recipient without LiveKit.
+- `voice_broadcast_keypad`: broadcast plus DTMF actions. Supported action values are `hangup`,
+  `repeat`, `ai`, `opt_out`, and `extension:100`. `opt_out` immediately adds the number to the
+  tenant do-not-call list.
+
+Main endpoints:
+
+```http
+POST /api/v1/outbound-campaigns
+GET  /api/v1/outbound-campaigns
+GET  /api/v1/outbound-campaigns/{campaign_id}
+PATCH /api/v1/outbound-campaigns/{campaign_id}
+POST /api/v1/outbound-campaigns/{campaign_id}/contacts/import
+GET  /api/v1/outbound-campaigns/{campaign_id}/recipients
+POST /api/v1/outbound-campaigns/{campaign_id}/validate
+POST /api/v1/outbound-campaigns/{campaign_id}/audio
+POST /api/v1/outbound-campaigns/{campaign_id}/test-call
+POST /api/v1/outbound-campaigns/{campaign_id}/schedule
+POST /api/v1/outbound-campaigns/{campaign_id}/start
+POST /api/v1/outbound-campaigns/{campaign_id}/pause
+POST /api/v1/outbound-campaigns/{campaign_id}/resume
+POST /api/v1/outbound-campaigns/{campaign_id}/cancel
+GET  /api/v1/outbound-campaigns/{campaign_id}/results/export
+POST /api/v1/outbound-campaigns/single-call
+GET  /api/v1/outbound-campaigns/do-not-call
+POST /api/v1/outbound-campaigns/do-not-call
+```
+
+Example AI campaign:
+
+```json
+{
+  "name": "Appointment confirmations",
+  "campaign_type": "ai_conversation",
+  "phone_number_id": "<connected-phone-number-uuid>",
+  "agent_id": "<active-agent-uuid>",
+  "message_text": "Confirm tomorrow's appointment and offer another time if needed.",
+  "timezone": "America/Denver",
+  "calling_window_start": "09:00:00",
+  "calling_window_end": "18:00:00",
+  "max_concurrency": 2,
+  "max_attempts": 2,
+  "retry_delay_minutes": 30
+}
+```
+
+Example keypad broadcast:
+
+```json
+{
+  "name": "Reservation reminder",
+  "campaign_type": "voice_broadcast_keypad",
+  "phone_number_id": "<connected-phone-number-uuid>",
+  "message_text": "Your reservation is tomorrow. Press 1 to repeat, 2 to speak to our AI assistant, 3 for Sales, or 9 to opt out.",
+  "voice": "coral",
+  "keypad_actions": {
+    "1": "repeat",
+    "2": "ai",
+    "3": "extension:100",
+    "9": "opt_out"
+  }
+}
+```
+
+Generate/approve the broadcast audio before validation or start:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://api.example.com/api/v1/outbound-campaigns/$CAMPAIGN_ID/audio
+```
+
+CSV and XLSX imports require a `phone_number` column in E.164 form. Optional standard columns are
+`first_name`, `last_name`, `language`, `timezone`, `external_id`, `consent_at`, and `do_not_call`.
+Every other column is retained in `custom_fields` and is available to an AI campaign. Duplicate
+numbers are skipped. Invalid rows are returned with their source row number. Maximum import size is
+controlled by `OUTBOUND_MAX_IMPORT_ROWS`.
+
+```csv
+phone_number,first_name,last_name,timezone,external_id,consent_at,appointment_date
++14155550101,John,Smith,America/Denver,C-101,2026-08-01T10:00:00Z,2026-08-25
++14155550102,Sarah,Jones,America/Chicago,C-102,2026-08-02T10:00:00Z,2026-08-26
+```
+
+The Celery worker enforces the campaign and platform concurrency caps, subscription state/monthly
+minutes, recipient timezone/calling window, retry delay, and do-not-call suppression. Celery Beat
+starts scheduled campaigns and rechecks running campaigns. Calls outside their local window are
+deferred to the next opening time.
+
+Configure the Backend `.env`:
+
+```dotenv
+OPENAI_API_KEY=...
+OUTBOUND_MAX_IMPORT_ROWS=10000
+OUTBOUND_MAX_CONCURRENCY_PER_COMPANY=5
+OUTBOUND_DISPATCH_INTERVAL_SECONDS=15
+ASTERISK_PROVISIONER_URL=http://asterisk-private-ip:9443
+ASTERISK_PROVISIONER_API_KEY=shared-secret
+```
+
+For generic SIP `ip_trunk` connections, provide `sip.server_uri` as the provider's outbound
+termination URI in addition to `allowed_addresses`; inbound-only trunks cannot place calls.
+Twilio provisioning now creates a Termination Credential List and SIP credential automatically,
+associates it with the Elastic SIP Trunk, and sends the encrypted credential to Asterisk. Existing
+Twilio connections created before this release must be disconnected and provisioned again once.
+
+Run the Backend stack:
+
+```bash
+docker compose run --rm api alembic upgrade head
+docker compose up -d --build api celery-worker celery-beat redis db minio minio-init
+docker compose logs -f api celery-worker celery-beat
+```
+
+Run the automated API tests:
+
+```bash
+docker compose run --rm api pytest app/tests/test_outbound_campaigns.py -q
+```
+
 ## Internal Voice Agent API
 
 Used exclusively by the LiveKit Voice Agent service.

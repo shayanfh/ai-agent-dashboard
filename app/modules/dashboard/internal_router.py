@@ -76,6 +76,7 @@ class ResolvedAgentResponse(BaseModel):
     llm_provider: Optional[str]
     llm_model: Optional[str]
     knowledge_version: int
+    outbound_context: dict[str, Any] | None = None
 
 
 class InternalCallCreate(BaseModel):
@@ -171,6 +172,64 @@ async def resolve_agent(
             )
         )
         or 1,
+    )
+
+
+@router.get("/voice/resolve-agent-by-id", response_model=ResolvedAgentResponse)
+async def resolve_agent_by_id(
+    agent_id: uuid.UUID = Query(...),
+    company_id: uuid.UUID = Query(...),
+    call_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_internal_api_key),
+):
+    outbound_call = await db.scalar(
+        select(Call).where(
+            Call.id == call_id,
+            Call.company_id == company_id,
+            Call.agent_id == agent_id,
+        )
+    )
+    if not outbound_call:
+        raise NotFoundError("Outbound call context not found")
+    from app.modules.outbound_campaigns.models import OutboundCampaign, OutboundRecipient
+    outbound_row = (
+        await db.execute(
+            select(OutboundCampaign, OutboundRecipient)
+            .join(OutboundRecipient, OutboundRecipient.id == outbound_call.recipient_id)
+            .where(OutboundCampaign.id == outbound_call.campaign_id)
+        )
+    ).one_or_none()
+    if not outbound_row:
+        raise NotFoundError("Outbound campaign context not found")
+    campaign, recipient = outbound_row
+    agent = await db.scalar(
+        select(Agent).where(Agent.id == agent_id, Agent.company_id == company_id)
+    )
+    if not agent:
+        raise NotFoundError("Agent not found")
+    return ResolvedAgentResponse(
+        company_id=str(company_id), agent_id=str(agent.id), agent_name=agent.name,
+        language=agent.language, greeting_message=agent.greeting_message,
+        system_prompt=agent.system_prompt, transfer_number=agent.transfer_number,
+        use_realtime=agent.use_realtime, realtime_provider=agent.realtime_provider,
+        realtime_model=agent.realtime_model, voice_provider=agent.voice_provider,
+        voice_id=agent.voice_id, tts_provider=agent.tts_provider,
+        tts_model=agent.tts_model, stt_provider=agent.stt_provider,
+        stt_model=agent.stt_model, llm_provider=agent.llm_provider,
+        llm_model=agent.llm_model,
+        knowledge_version=(await db.scalar(select(Company.knowledge_version).where(Company.id == company_id))) or 1,
+        outbound_context={
+            "campaign_name": campaign.name,
+            "objective": campaign.message_text,
+            "recipient": {
+                "first_name": recipient.first_name,
+                "last_name": recipient.last_name,
+                "language": recipient.language,
+                "external_id": recipient.external_id,
+                "custom_fields": recipient.custom_fields or {},
+            },
+        },
     )
 
 

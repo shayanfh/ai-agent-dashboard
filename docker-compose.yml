@@ -78,6 +78,19 @@ services:
       - .:/app
     command: celery -A app.workers.celery_app worker --loglevel=info -Q calls,integrations,notifications,knowledge
 
+  celery-beat:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: celery -A app.workers.celery_app beat --loglevel=info
+
   db:
     image: postgres:16-alpine
     environment:

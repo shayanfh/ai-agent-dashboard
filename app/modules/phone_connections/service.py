@@ -143,10 +143,12 @@ class PhoneConnectionService:
         safe_configuration: dict = {}
         if data.provider == PhoneProvider.TWILIO and data.twilio:
             credentials = data.twilio.model_dump()
+            public_sip_uri = settings.ASTERISK_PUBLIC_SIP_URI.lower()
+            transport = "udp" if "transport=udp" in public_sip_uri else "tls"
             safe_configuration = {
                 "phone_number_sid": data.twilio.phone_number_sid,
                 "twilio_account": f"{data.twilio.account_sid[:6]}...{data.twilio.account_sid[-4:]}",
-                "transport": "tls",
+                "transport": transport,
             }
         elif data.sip:
             credentials = {
@@ -230,6 +232,7 @@ class PhoneConnectionService:
         credentials = self._credentials(connection)
         asterisk_resource = None
         external_trunk_id = None
+        twilio_resource = None
         try:
             asterisk = AsteriskProvisionerClient()
             configuration = connection.configuration or {}
@@ -237,6 +240,27 @@ class PhoneConnectionService:
             asterisk_mode = (
                 "twilio" if connection.provider == PhoneProvider.TWILIO else sip_mode
             )
+            if connection.provider == PhoneProvider.TWILIO:
+                twilio_resource = await TwilioElasticSipClient(
+                    credentials["account_sid"], credentials["auth_token"]
+                ).provision(
+                    connection_id=str(connection.id),
+                    name=connection.name or f"Mozaic {phone.phone_number}",
+                    phone_number_sid=credentials["phone_number_sid"],
+                    target_sip_uri=settings.ASTERISK_PUBLIC_SIP_URI,
+                )
+                external_trunk_id = twilio_resource.trunk_sid
+                credentials.update(
+                    auth_username=twilio_resource.sip_username,
+                    auth_password=twilio_resource.sip_password,
+                )
+                connection.credentials_encrypted = encrypt_credential(json.dumps(credentials))
+                configuration = {
+                    **configuration,
+                    "server_uri": f"sip:{twilio_resource.domain}",
+                    "credential_list_sid": twilio_resource.credential_list_sid,
+                }
+                connection.configuration = configuration
             asterisk_resource = await asterisk.provision(
                 str(connection.id),
                 {
@@ -257,16 +281,6 @@ class PhoneConnectionService:
                     "public_sip_uri": settings.ASTERISK_PUBLIC_SIP_URI,
                 },
             )
-            if connection.provider == PhoneProvider.TWILIO:
-                external_trunk_id = await TwilioElasticSipClient(
-                    credentials["account_sid"], credentials["auth_token"]
-                ).provision(
-                    connection_id=str(connection.id),
-                    name=connection.name or f"Mozaic {phone.phone_number}",
-                    phone_number_sid=credentials["phone_number_sid"],
-                    target_sip_uri=settings.ASTERISK_PUBLIC_SIP_URI,
-                )
-
             connection.livekit_trunk_id = None
             connection.dispatch_rule_id = None
             connection.external_trunk_id = external_trunk_id
@@ -301,7 +315,10 @@ class PhoneConnectionService:
                 try:
                     await TwilioElasticSipClient(
                         credentials["account_sid"], credentials["auth_token"]
-                    ).delete(external_trunk_id)
+                    ).delete(
+                        external_trunk_id,
+                        twilio_resource.credential_list_sid if twilio_resource else None,
+                    )
                 except Exception:
                     logger.warning("Could not roll back Twilio trunk", exc_info=True)
             if asterisk and asterisk_resource:
@@ -350,7 +367,10 @@ class PhoneConnectionService:
         if connection.provider == PhoneProvider.TWILIO and connection.external_trunk_id:
             await TwilioElasticSipClient(
                 credentials["account_sid"], credentials["auth_token"]
-            ).delete(connection.external_trunk_id)
+            ).delete(
+                connection.external_trunk_id,
+                (connection.configuration or {}).get("credential_list_sid"),
+            )
         if connection.asterisk_resource_id:
             await AsteriskProvisionerClient().delete(connection.asterisk_resource_id)
         phone = await self.db.scalar(

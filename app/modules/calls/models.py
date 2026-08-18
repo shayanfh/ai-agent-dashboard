@@ -26,6 +26,11 @@ class CallStatus(str, Enum):
     TRANSFERRED = "transferred"
 
 
+class CallDirection(str, Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+
+
 class CallOutcome(str, Enum):
     BOOKING_CREATED = "booking_created"
     INFORMATION_REQUEST = "information_request"
@@ -60,7 +65,17 @@ class Call(Base):
     phone_number_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("phone_numbers.id", ondelete="SET NULL"), nullable=True
     )
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("outbound_campaigns.id", ondelete="SET NULL"), nullable=True
+    )
+    recipient_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("outbound_recipients.id", ondelete="SET NULL"), nullable=True
+    )
+    direction: Mapped[CallDirection] = mapped_column(
+        EnumByValue(CallDirection, "call_direction"), default=CallDirection.INBOUND
+    )
     caller_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    destination_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     livekit_room_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status: Mapped[CallStatus] = mapped_column(
         EnumByValue(CallStatus, "call_status"), default=CallStatus.INITIATED

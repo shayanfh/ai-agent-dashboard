@@ -1,5 +1,7 @@
 import json
 import logging
+import secrets
+import string
 from dataclasses import dataclass
 
 import httpx
@@ -21,6 +23,15 @@ class AsteriskResource:
     resource_id: str
     state: str
     provider_setup: dict
+
+
+@dataclass(slots=True)
+class TwilioTrunkResource:
+    trunk_sid: str
+    domain: str
+    credential_list_sid: str
+    sip_username: str
+    sip_password: str
 
 
 class AsteriskProvisionerClient:
@@ -110,6 +121,29 @@ class AsteriskProvisionerClient:
             response = await client.delete(f"/v1/extensions/{resource_id}")
             if response.status_code not in (204, 404):
                 response.raise_for_status()
+
+    async def upload_outbound_media(self, media_id: str, wav: bytes) -> dict:
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=max(settings.ASTERISK_REQUEST_TIMEOUT_SECONDS, 60),
+        ) as client:
+            response = await client.put(
+                f"/v1/outbound-media/{media_id}",
+                files={"media": (f"{media_id}.wav", wav, "audio/wav")},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def originate_outbound(self, payload: dict) -> dict:
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers=self.headers,
+            timeout=settings.ASTERISK_REQUEST_TIMEOUT_SECONDS,
+        ) as client:
+            response = await client.post("/v1/outbound-calls", json=payload)
+            response.raise_for_status()
+            return response.json()
 
 
 class LiveKitProvisioner:
@@ -273,6 +307,7 @@ class TwilioElasticSipClient:
     base_url = "https://trunking.twilio.com/v1"
 
     def __init__(self, account_sid: str, auth_token: str) -> None:
+        self.account_sid = account_sid
         self.auth = httpx.BasicAuth(account_sid, auth_token)
 
     async def provision(
@@ -282,8 +317,12 @@ class TwilioElasticSipClient:
         name: str,
         phone_number_sid: str,
         target_sip_uri: str,
-    ) -> str:
+    ) -> TwilioTrunkResource:
         domain = f"mw-{connection_id.replace('-', '')[:20]}.pstn.twilio.com"
+        sip_username = f"mw-{connection_id.replace('-', '')[:24]}"
+        alphabet = string.ascii_letters + string.digits
+        sip_password = "".join(secrets.choice(alphabet) for _ in range(40))
+        credential_list_sid: str | None = None
         async with httpx.AsyncClient(
             base_url=self.base_url, auth=self.auth, timeout=20
         ) as client:
@@ -293,6 +332,27 @@ class TwilioElasticSipClient:
             trunk_response.raise_for_status()
             trunk_sid = trunk_response.json()["sid"]
             try:
+                async with httpx.AsyncClient(
+                    base_url="https://api.twilio.com/2010-04-01",
+                    auth=self.auth,
+                    timeout=20,
+                ) as core_client:
+                    credential_list = await core_client.post(
+                        f"/Accounts/{self.account_sid}/SIP/CredentialLists.json",
+                        data={"FriendlyName": f"Mozaic {connection_id}"},
+                    )
+                    credential_list.raise_for_status()
+                    credential_list_sid = credential_list.json()["sid"]
+                    credential = await core_client.post(
+                        f"/Accounts/{self.account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json",
+                        data={"Username": sip_username, "Password": sip_password},
+                    )
+                    credential.raise_for_status()
+                association = await client.post(
+                    f"/Trunks/{trunk_sid}/CredentialLists",
+                    data={"CredentialListSid": credential_list_sid},
+                )
+                association.raise_for_status()
                 origination = await client.post(
                     f"/Trunks/{trunk_sid}/OriginationUrls",
                     data={
@@ -309,15 +369,37 @@ class TwilioElasticSipClient:
                     data={"PhoneNumberSid": phone_number_sid},
                 )
                 number.raise_for_status()
-                return trunk_sid
+                return TwilioTrunkResource(
+                    trunk_sid=trunk_sid,
+                    domain=domain,
+                    credential_list_sid=credential_list_sid,
+                    sip_username=sip_username,
+                    sip_password=sip_password,
+                )
             except Exception:
                 await client.delete(f"/Trunks/{trunk_sid}")
+                if credential_list_sid:
+                    await self._delete_credential_list(credential_list_sid)
                 raise
 
-    async def delete(self, trunk_sid: str) -> None:
+    async def _delete_credential_list(self, credential_list_sid: str) -> None:
+        async with httpx.AsyncClient(
+            base_url="https://api.twilio.com/2010-04-01",
+            auth=self.auth,
+            timeout=20,
+        ) as client:
+            response = await client.delete(
+                f"/Accounts/{self.account_sid}/SIP/CredentialLists/{credential_list_sid}.json"
+            )
+            if response.status_code not in (204, 404):
+                response.raise_for_status()
+
+    async def delete(self, trunk_sid: str, credential_list_sid: str | None = None) -> None:
         async with httpx.AsyncClient(
             base_url=self.base_url, auth=self.auth, timeout=20
         ) as client:
             response = await client.delete(f"/Trunks/{trunk_sid}")
             if response.status_code not in (204, 404):
                 response.raise_for_status()
+        if credential_list_sid:
+            await self._delete_credential_list(credential_list_sid)
