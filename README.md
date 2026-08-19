@@ -420,6 +420,8 @@ Supported campaign types:
   configured LiveKit Voice Agent. Contact fields are loaded once as outbound context.
 - `voice_broadcast`: the Backend generates one WAV from `message_text`, stores it in MinIO, caches
   it on Asterisk, and Asterisk plays the same file to every answered recipient without LiveKit.
+  TTS output is normalized to uncompressed PCM16 mono at 8 kHz before upload so FreePBX can play it
+  reliably on an `ulaw`/`alaw` phone channel.
 - `voice_broadcast_keypad`: broadcast plus DTMF actions. Supported action values are `hangup`,
   `repeat`, `ai`, `opt_out`, and `extension:100`. `opt_out` immediately adds the number to the
   tenant do-not-call list.
