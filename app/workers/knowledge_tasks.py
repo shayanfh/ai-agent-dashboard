@@ -18,6 +18,7 @@ from app.modules.knowledge_base.models import (
 )
 from app.modules.knowledge_base.processor import chunk_text, extract_text
 from app.modules.knowledge_base.versioning import bump_knowledge_version
+from app.workers.async_utils import run_async
 from app.workers.celery_app import celery_app
 
 
@@ -110,7 +111,7 @@ async def _process(document_id: uuid.UUID) -> dict[str, object]:
 def process_knowledge_document(self, document_id: str) -> dict[str, object]:
     parsed_id = uuid.UUID(document_id)
     try:
-        return asyncio.run(_process(parsed_id))
+        return run_async(lambda: _process(parsed_id))
     except Exception as exc:
-        asyncio.run(_mark_failed(parsed_id, str(exc)))
+        run_async(lambda: _mark_failed(parsed_id, str(exc)))
         raise self.retry(exc=exc, countdown=min(60 * (self.request.retries + 1), 300))

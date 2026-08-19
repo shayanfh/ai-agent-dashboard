@@ -1,4 +1,6 @@
 from celery import Celery
+
+import app.core.model_registry  # noqa: F401
 from app.core.config import settings
 
 celery_app = Celery(

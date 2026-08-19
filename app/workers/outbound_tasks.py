@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -16,12 +15,13 @@ from app.modules.outbound_campaigns.models import (
 )
 from app.modules.phone_connections.providers import AsteriskProvisionerClient
 from app.modules.phone_numbers.models import PhoneNumber
+from app.workers.async_utils import run_async
 from app.workers.celery_app import celery_app
 
 
 @celery_app.task(name="app.workers.outbound_tasks.dispatch_due_campaigns")
 def dispatch_due_campaigns() -> None:
-    asyncio.run(_dispatch_due())
+    run_async(_dispatch_due)
 
 
 async def _dispatch_due() -> None:
@@ -55,7 +55,8 @@ async def _dispatch_due() -> None:
 
 @celery_app.task(name="app.workers.outbound_tasks.dispatch_campaign")
 def dispatch_campaign(campaign_id: str) -> None:
-    asyncio.run(_dispatch_campaign(uuid.UUID(campaign_id)))
+    parsed_id = uuid.UUID(campaign_id)
+    run_async(lambda: _dispatch_campaign(parsed_id))
 
 
 async def _dispatch_campaign(campaign_id: uuid.UUID) -> None:

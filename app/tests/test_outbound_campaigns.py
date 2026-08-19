@@ -173,10 +173,11 @@ async def test_generate_and_get_tenant_scoped_broadcast_audio(
         assert voice == "coral"
         return "a" * 64, b"RIFF0000WAVE"
 
-    async def upload_media(_self, media_id, wav):
-        assert media_id == "a" * 64
-        assert wav == b"RIFF0000WAVE"
-        return {"media_id": media_id}
+    class FakeProvisioner:
+        async def upload_outbound_media(self, media_id, wav):
+            assert media_id == "a" * 64
+            assert wav == b"RIFF0000WAVE"
+            return {"media_id": media_id}
 
     monkeypatch.setattr(
         "app.modules.outbound_campaigns.service.get_object_storage",
@@ -187,8 +188,8 @@ async def test_generate_and_get_tenant_scoped_broadcast_audio(
         generate_wav,
     )
     monkeypatch.setattr(
-        "app.modules.outbound_campaigns.service.AsteriskProvisionerClient.upload_outbound_media",
-        upload_media,
+        "app.modules.outbound_campaigns.service.AsteriskProvisionerClient",
+        FakeProvisioner,
     )
 
     generated = await client.post(

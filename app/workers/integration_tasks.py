@@ -1,5 +1,6 @@
 import logging
-import asyncio
+
+from app.workers.async_utils import run_async
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -45,12 +46,7 @@ def sync_request_to_erpnext(self, request_id: str, company_id: str) -> dict:
 
                 return {"status": "success", "erpnext_doc": doc_name}
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(_sync())
-        finally:
-            loop.close()
+        return run_async(_sync)
 
     except Exception as exc:
         logger.error(f"ERPNext sync failed for request {request_id}: {exc}")
