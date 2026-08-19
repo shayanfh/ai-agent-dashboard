@@ -16,6 +16,7 @@ from app.core.dependencies import (
 from app.core.schemas import PaginatedResponse
 from app.modules.outbound_campaigns.models import CampaignStatus
 from app.modules.outbound_campaigns.schemas import (
+    AudioGenerateRequest,
     AudioResponse,
     CampaignCreate,
     CampaignResponse,
@@ -151,10 +152,13 @@ async def validate_campaign(
 @router.post("/{campaign_id}/audio", response_model=AudioResponse)
 async def generate_audio(
     campaign_id: uuid.UUID,
+    data: AudioGenerateRequest | None = None,
     current_user: CurrentUser = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await OutboundCampaignService(db).generate_audio(campaign_id, current_user)
+    return await OutboundCampaignService(db).generate_audio(
+        campaign_id, current_user, data
+    )
 
 
 @router.post(

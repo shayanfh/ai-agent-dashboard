@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import math
 import re
 import uuid
@@ -34,6 +35,7 @@ from app.modules.outbound_campaigns.models import (
     RecipientStatus,
 )
 from app.modules.outbound_campaigns.schemas import (
+    AudioGenerateRequest,
     AudioResponse,
     CampaignCreate,
     CampaignResponse,
@@ -51,6 +53,8 @@ from app.modules.outbound_campaigns.schemas import (
 from app.modules.outbound_campaigns.tts import CampaignTTS
 from app.modules.phone_connections.providers import AsteriskProvisionerClient
 from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
+
+logger = logging.getLogger(__name__)
 
 E164 = re.compile(r"^\+[1-9]\d{7,14}$")
 TERMINAL = {
@@ -441,9 +445,18 @@ class OutboundCampaignService:
         )
 
     async def generate_audio(
-        self, campaign_id: uuid.UUID, user: CurrentUser
+        self,
+        campaign_id: uuid.UUID,
+        user: CurrentUser,
+        data: AudioGenerateRequest | None = None,
     ) -> AudioResponse:
         campaign = await self._get(campaign_id, user)
+        if data:
+            campaign.message_text = data.message_text
+            if data.voice:
+                campaign.voice = data.voice
+            campaign.audio_media_id = None
+            campaign.audio_storage_key = None
         if (
             campaign.campaign_type == CampaignType.AI_CONVERSATION
             or not campaign.message_text
@@ -460,6 +473,12 @@ class OutboundCampaignService:
         campaign.audio_storage_key = key
         campaign.audio_media_id = media_id
         await self.db.commit()
+        logger.info(
+            "Generated outbound campaign audio campaign_id=%s media_id=%s voice=%s",
+            campaign.id,
+            media_id,
+            campaign.voice,
+        )
         return AudioResponse(audio_ready=True, storage_key=key, media_id=media_id)
 
     async def schedule(

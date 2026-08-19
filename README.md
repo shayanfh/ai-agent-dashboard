@@ -487,8 +487,14 @@ Generate/approve the broadcast audio before validation or start:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message_text":"Your reservation is tomorrow.","voice":"coral"}' \
   https://api.example.com/api/v1/outbound-campaigns/$CAMPAIGN_ID/audio
 ```
+
+Send the current editor text in the `/audio` request as shown above. The operation saves that text
+and voice before generating the WAV, preventing a stale previously saved message from being used.
+An empty body remains supported and generates from the campaign's already persisted values.
 
 CSV and XLSX imports require a `phone_number` column in E.164 form. Optional standard columns are
 `first_name`, `last_name`, `language`, `timezone`, `external_id`, `consent_at`, and `do_not_call`.
