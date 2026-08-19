@@ -5,7 +5,7 @@ import io
 import math
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from openpyxl import Workbook, load_workbook
@@ -630,6 +630,9 @@ class OutboundCampaignService:
             message_text=data.message_text,
             voice=data.voice,
             language=data.language,
+            timezone="UTC",
+            calling_window_start=time(0, 0),
+            calling_window_end=time(23, 59, 59),
             max_attempts=1,
         )
         response = await self.create(campaign_data, user)
@@ -793,7 +796,9 @@ class OutboundCampaignService:
                 message_text=source.message_text,
                 voice=source.voice,
                 language=source.language,
-                timezone=source.timezone,
+                timezone="UTC",
+                calling_window_start=time(0, 0),
+                calling_window_end=time(23, 59, 59),
                 ring_timeout_seconds=source.ring_timeout_seconds,
                 keypad_actions=source.keypad_actions,
                 max_attempts=1,
