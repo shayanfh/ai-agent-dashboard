@@ -36,6 +36,7 @@ from app.modules.outbound_campaigns.models import (
 )
 from app.modules.outbound_campaigns.schemas import (
     AudioGenerateRequest,
+    AudioPlaybackResponse,
     AudioResponse,
     CampaignCreate,
     CampaignResponse,
@@ -480,6 +481,23 @@ class OutboundCampaignService:
             campaign.voice,
         )
         return AudioResponse(audio_ready=True, storage_key=key, media_id=media_id)
+
+    async def get_audio_url(
+        self, campaign_id: uuid.UUID, user: CurrentUser
+    ) -> AudioPlaybackResponse:
+        campaign = await self._get(campaign_id, user)
+        if not campaign.audio_storage_key or not campaign.audio_media_id:
+            raise NotFoundError("Campaign audio has not been generated")
+        expires_in = settings.RECORDING_PRESIGNED_URL_EXPIRE_SECONDS
+        url = await get_object_storage().presigned_download_url(
+            key=campaign.audio_storage_key,
+            expires_in=expires_in,
+        )
+        return AudioPlaybackResponse(
+            url=url,
+            expires_in_seconds=expires_in,
+            media_id=campaign.audio_media_id,
+        )
 
     async def schedule(
         self, campaign_id: uuid.UUID, data: CampaignScheduleRequest, user: CurrentUser

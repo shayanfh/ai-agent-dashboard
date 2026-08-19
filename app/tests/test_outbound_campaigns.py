@@ -135,3 +135,79 @@ async def test_broadcast_requires_message(client, phone_a, admin_a_token):
         },
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_and_get_tenant_scoped_broadcast_audio(
+    client,
+    db_session,
+    company_a,
+    phone_a,
+    admin_a_token,
+    admin_b_token,
+    monkeypatch,
+):
+    await _connect_phone(db_session, company_a, phone_a)
+    auth = {"Authorization": f"Bearer {admin_a_token}"}
+    created = await client.post(
+        "/api/v1/outbound-campaigns",
+        headers=auth,
+        json={
+            "name": "Browser audio preview",
+            "campaign_type": "voice_broadcast",
+            "phone_number_id": str(phone_a.id),
+            "message_text": "Old text",
+        },
+    )
+    campaign_id = created.json()["id"]
+
+    class FakeStorage:
+        async def upload(self, source, *, key, content_type):
+            return f"s3://test/{key}"
+
+        async def presigned_download_url(self, *, key, expires_in):
+            return f"https://storage.test/{key}?expires={expires_in}"
+
+    async def generate_wav(_self, *, text, voice):
+        assert text == "The current editor text"
+        assert voice == "coral"
+        return "a" * 64, b"RIFF0000WAVE"
+
+    async def upload_media(_self, media_id, wav):
+        assert media_id == "a" * 64
+        assert wav == b"RIFF0000WAVE"
+        return {"media_id": media_id}
+
+    monkeypatch.setattr(
+        "app.modules.outbound_campaigns.service.get_object_storage",
+        lambda: FakeStorage(),
+    )
+    monkeypatch.setattr(
+        "app.modules.outbound_campaigns.service.CampaignTTS.generate_wav",
+        generate_wav,
+    )
+    monkeypatch.setattr(
+        "app.modules.outbound_campaigns.service.AsteriskProvisionerClient.upload_outbound_media",
+        upload_media,
+    )
+
+    generated = await client.post(
+        f"/api/v1/outbound-campaigns/{campaign_id}/audio",
+        headers=auth,
+        json={"message_text": "The current editor text", "voice": "coral"},
+    )
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["media_id"] == "a" * 64
+
+    playback = await client.get(
+        f"/api/v1/outbound-campaigns/{campaign_id}/audio", headers=auth
+    )
+    assert playback.status_code == 200, playback.text
+    assert playback.json()["url"].startswith("https://storage.test/outbound/")
+    assert playback.json()["expires_in_seconds"] == 900
+
+    cross_tenant = await client.get(
+        f"/api/v1/outbound-campaigns/{campaign_id}/audio",
+        headers={"Authorization": f"Bearer {admin_b_token}"},
+    )
+    assert cross_tenant.status_code == 404

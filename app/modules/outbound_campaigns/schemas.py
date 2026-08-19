@@ -170,6 +170,12 @@ class AudioResponse(BaseModel):
     media_id: str
 
 
+class AudioPlaybackResponse(BaseModel):
+    url: str
+    expires_in_seconds: int
+    media_id: str
+
+
 class AudioGenerateRequest(BaseModel):
     message_text: str = Field(min_length=1, max_length=5000)
     voice: VoiceName | None = None

@@ -435,6 +435,7 @@ POST /api/v1/outbound-campaigns/{campaign_id}/contacts/import
 GET  /api/v1/outbound-campaigns/{campaign_id}/recipients
 POST /api/v1/outbound-campaigns/{campaign_id}/validate
 POST /api/v1/outbound-campaigns/{campaign_id}/audio
+GET  /api/v1/outbound-campaigns/{campaign_id}/audio
 POST /api/v1/outbound-campaigns/{campaign_id}/test-call
 POST /api/v1/outbound-campaigns/{campaign_id}/schedule
 POST /api/v1/outbound-campaigns/{campaign_id}/start
@@ -495,6 +496,23 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 Send the current editor text in the `/audio` request as shown above. The operation saves that text
 and voice before generating the WAV, preventing a stale previously saved message from being used.
 An empty body remains supported and generates from the campaign's already persisted values.
+
+To play the generated WAV in the Dashboard, request a short-lived tenant-scoped download URL:
+
+```http
+GET /api/v1/outbound-campaigns/{campaign_id}/audio
+```
+
+```json
+{
+  "url": "https://storage.example.com/...signed...",
+  "expires_in_seconds": 900,
+  "media_id": "..."
+}
+```
+
+Set the returned `url` as the browser `<audio src>` value. Request a fresh URL after it expires;
+never persist the signed URL as campaign state.
 
 CSV and XLSX imports require a `phone_number` column in E.164 form. Optional standard columns are
 `first_name`, `last_name`, `language`, `timezone`, `external_id`, `consent_at`, and `do_not_call`.
