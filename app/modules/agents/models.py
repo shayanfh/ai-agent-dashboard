@@ -48,7 +48,6 @@ class Agent(Base):
     llm_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     system_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     greeting_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    transfer_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     status: Mapped[AgentStatus] = mapped_column(
         EnumByValue(AgentStatus, "agent_status"), default=AgentStatus.DRAFT
     )

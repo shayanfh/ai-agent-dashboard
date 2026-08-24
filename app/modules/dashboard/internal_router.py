@@ -61,7 +61,6 @@ class ResolvedAgentResponse(BaseModel):
     language: str
     greeting_message: Optional[str]
     system_prompt: Optional[str]
-    transfer_number: Optional[str]
     use_realtime: bool
     # Realtime: one WebSocket session handles everything
     realtime_provider: Optional[str]
@@ -154,7 +153,6 @@ async def resolve_agent(
         language=agent.language,
         greeting_message=agent.greeting_message,
         system_prompt=agent.system_prompt,
-        transfer_number=agent.transfer_number,
         use_realtime=agent.use_realtime,
         realtime_provider=agent.realtime_provider,
         realtime_model=agent.realtime_model,
@@ -211,7 +209,7 @@ async def resolve_agent_by_id(
     return ResolvedAgentResponse(
         company_id=str(company_id), agent_id=str(agent.id), agent_name=agent.name,
         language=agent.language, greeting_message=agent.greeting_message,
-        system_prompt=agent.system_prompt, transfer_number=agent.transfer_number,
+        system_prompt=agent.system_prompt,
         use_realtime=agent.use_realtime, realtime_provider=agent.realtime_provider,
         realtime_model=agent.realtime_model, voice_provider=agent.voice_provider,
         voice_id=agent.voice_id, tts_provider=agent.tts_provider,

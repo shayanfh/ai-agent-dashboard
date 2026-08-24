@@ -46,7 +46,6 @@ class PhoneNumber(Base):
     sip_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     livekit_trunk_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     dispatch_rule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    transfer_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     operating_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     connection_status: Mapped[ConnectionStatus] = mapped_column(
         EnumByValue(ConnectionStatus, "connection_status"), default=ConnectionStatus.PENDING

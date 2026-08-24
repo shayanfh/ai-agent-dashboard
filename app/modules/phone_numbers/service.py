@@ -102,7 +102,6 @@ class PhoneNumberService:
             configuration=connection.configuration if connection else None,
             last_error=connection.last_error if connection else None,
             connected_at=connection.connected_at if connection else None,
-            transfer_number=phone.transfer_number,
             operating_hours=phone.operating_hours,
             is_enabled=phone.is_enabled,
             created_at=phone.created_at,
@@ -144,7 +143,6 @@ class PhoneNumberService:
             if connection.phone_number_id is None:
                 raise NotFoundError("Phone number mapping not found")
             phone = await self._get_phone(connection.phone_number_id, current_user)
-            phone.transfer_number = data.transfer_number
             phone.operating_hours = data.operating_hours
             # Connected numbers start disabled until provisioning, regardless of input.
             await self.db.commit()
@@ -161,7 +159,6 @@ class PhoneNumberService:
                     "company_id": company_id,
                     "phone_number": data.phone_number,
                     "agent_id": data.agent_id,
-                    "transfer_number": data.transfer_number,
                     "operating_hours": data.operating_hours,
                     "is_enabled": data.is_enabled,
                 }

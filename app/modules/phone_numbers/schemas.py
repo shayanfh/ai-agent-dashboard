@@ -18,7 +18,6 @@ class PhoneNumberCreate(BaseModel):
 
     phone_number: str
     agent_id: uuid.UUID | None = None
-    transfer_number: str | None = None
     operating_hours: dict | None = None
     is_enabled: bool = True
     name: str | None = Field(default=None, min_length=2, max_length=255)
@@ -69,7 +68,6 @@ class PhoneNumberCreate(BaseModel):
 class PhoneNumberUpdate(BaseModel):
     phone_number: str | None = None
     agent_id: uuid.UUID | None = None
-    transfer_number: str | None = None
     operating_hours: dict | None = None
     is_enabled: bool | None = None
     name: str | None = Field(default=None, min_length=2, max_length=255)
@@ -101,7 +99,6 @@ class PhoneNumberResponse(BaseModel):
     configuration: dict | None
     last_error: str | None
     connected_at: datetime | None
-    transfer_number: str | None
     operating_hours: dict | None
     is_enabled: bool
     created_at: datetime

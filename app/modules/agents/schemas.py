@@ -24,7 +24,6 @@ class AgentCreate(BaseModel):
     llm_model: Optional[str] = None
     system_prompt: Optional[str] = None
     greeting_message: Optional[str] = None
-    transfer_number: Optional[str] = None
     status: AgentStatus = AgentStatus.DRAFT
 
 
@@ -45,7 +44,6 @@ class AgentUpdate(BaseModel):
     llm_model: Optional[str] = None
     system_prompt: Optional[str] = None
     greeting_message: Optional[str] = None
-    transfer_number: Optional[str] = None
     status: Optional[AgentStatus] = None
 
 
@@ -68,7 +66,6 @@ class AgentResponse(BaseModel):
     llm_model: Optional[str]
     system_prompt: Optional[str]
     greeting_message: Optional[str]
-    transfer_number: Optional[str]
     status: AgentStatus
     created_at: datetime
     updated_at: datetime
