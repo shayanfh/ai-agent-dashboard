@@ -198,3 +198,59 @@ async def test_super_admin_can_create_plan_and_manual_invoice(
     assert invoice.status_code == 201, invoice.text
     assert invoice.json()["total_minor"] == 5500
     assert invoice.json()["amount_due_minor"] == 5500
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_delete_unused_plan(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    super_admin_token: str,
+):
+    plan = Plan(
+        name="Temporary",
+        slug="temporary-delete-test",
+        monthly_minutes=100,
+        max_agents=1,
+        max_integrations=1,
+    )
+    db_session.add(plan)
+    await db_session.flush()
+
+    response = await client.delete(
+        f"/api/v1/admin/billing/plans/{plan.id}",
+        headers={"Authorization": f"Bearer {super_admin_token}"},
+    )
+
+    assert response.status_code == 204, response.text
+    assert await db_session.get(Plan, plan.id) is None
+
+
+@pytest.mark.asyncio
+async def test_plan_in_use_cannot_be_deleted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    company_a: Company,
+    super_admin_token: str,
+):
+    _, plan = await create_subscription(db_session, company_a)
+
+    response = await client.delete(
+        f"/api/v1/admin/billing/plans/{plan.id}",
+        headers={"Authorization": f"Bearer {super_admin_token}"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_company_admin_cannot_delete_plan(
+    client: AsyncClient,
+    admin_a_token: str,
+):
+    response = await client.delete(
+        "/api/v1/admin/billing/plans/00000000-0000-0000-0000-000000000102",
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+
+    assert response.status_code == 403

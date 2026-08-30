@@ -807,6 +807,7 @@ Super Admin endpoints:
 ```http
 POST  /api/v1/admin/billing/plans
 PATCH /api/v1/admin/billing/plans/{plan_id}
+DELETE /api/v1/admin/billing/plans/{plan_id}
 GET   /api/v1/admin/billing/invoices
 GET   /api/v1/admin/billing/invoices/{invoice_id}
 POST  /api/v1/admin/billing/invoices

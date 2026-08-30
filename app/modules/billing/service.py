@@ -2,7 +2,7 @@ import math
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -302,6 +302,31 @@ class AdminBillingService(BillingService):
             setattr(plan, key, value)
         await self.db.commit()
         return PlanResponse.model_validate(plan)
+
+    async def delete_plan(self, plan_id: uuid.UUID) -> None:
+        plan = await self.db.get(Plan, plan_id)
+        if not plan:
+            raise NotFoundError("Plan not found")
+
+        subscription_id = await self.db.scalar(
+            select(Subscription.id)
+            .where(
+                or_(
+                    Subscription.plan_id == plan_id,
+                    Subscription.pending_plan_id == plan_id,
+                )
+            )
+            .limit(1)
+        )
+        if subscription_id:
+            raise ConflictError("Plan is currently used by a subscription")
+
+        await self.db.delete(plan)
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ConflictError("Plan cannot be deleted because it is in use") from exc
 
     async def create_invoice(self, data: AdminInvoiceCreate) -> InvoiceResponse:
         company = await self.db.get(Company, data.company_id)

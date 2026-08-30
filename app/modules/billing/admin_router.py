@@ -40,6 +40,15 @@ async def update_plan(
     return await AdminBillingService(db).update_plan(plan_id, data)
 
 
+@router.delete("/plans/{plan_id}", status_code=204)
+async def delete_plan(
+    plan_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    await AdminBillingService(db).delete_plan(plan_id)
+
+
 @router.get("/invoices", response_model=PaginatedResponse[InvoiceResponse])
 async def list_invoices(
     page: int = Query(1, ge=1),
