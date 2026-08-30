@@ -14,15 +14,6 @@ VoiceName = Literal[
     "ash",
     "ballad",
     "coral",
-    "echo",
-    "fable",
-    "onyx",
-    "nova",
-    "sage",
-    "shimmer",
-    "verse",
-    "marin",
-    "cedar",
 ]
 
 GREETING_TEMPLATE = (
