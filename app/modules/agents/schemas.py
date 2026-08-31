@@ -13,13 +13,14 @@ DEFAULT_REALTIME_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 
 
 class AgentCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     name: str
     business_type: Optional[str] = None
     language: str = "en"
     # ── Realtime mode ─────────────────────────────────────────────────────────
     use_realtime: bool = False
     # ── Pipeline mode ─────────────────────────────────────────────────────────
-    voice_provider: Optional[str] = None
     voice_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     tts_provider: Optional[str] = None
     tts_model: Optional[str] = None
@@ -33,11 +34,12 @@ class AgentCreate(BaseModel):
 
 
 class AgentUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     name: Optional[str] = None
     business_type: Optional[str] = None
     language: Optional[str] = None
     use_realtime: Optional[bool] = None
-    voice_provider: Optional[str] = None
     voice_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     tts_provider: Optional[str] = None
     tts_model: Optional[str] = None

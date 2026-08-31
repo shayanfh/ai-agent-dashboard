@@ -80,7 +80,6 @@ async def test_realtime_agent_uses_fixed_models_and_selected_elevenlabs_voice(
             "name": "Realtime Agent",
             "use_realtime": True,
             "voice_id": "custom-elevenlabs-voice",
-            "voice_provider": "openai",
             "tts_provider": "openai",
             "tts_model": "customer-controlled-model",
             "stt_provider": "deepgram",
@@ -114,13 +113,19 @@ async def test_realtime_model_is_not_customer_writable(
             "use_realtime": True,
             "realtime_provider": "customer-provider",
             "realtime_model": "customer-model",
+            "voice_provider": "customer-provider",
         },
         headers={"Authorization": f"Bearer {admin_a_token}"},
     )
 
-    assert response.status_code == 201
-    assert response.json()["realtime_provider"] == "openai"
-    assert response.json()["realtime_model"] == "gpt-realtime"
+    assert response.status_code == 422
+    details = response.json()["detail"]
+    forbidden_fields = {item["loc"][-1] for item in details}
+    assert forbidden_fields == {
+        "realtime_provider",
+        "realtime_model",
+        "voice_provider",
+    }
 
 
 @pytest.mark.asyncio

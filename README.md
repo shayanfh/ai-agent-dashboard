@@ -605,8 +605,9 @@ objects require a temporary presigned URL returned by
 Realtime agents use a server-owned hybrid pipeline: OpenAI `gpt-realtime` receives the caller's
 audio and returns text, then ElevenLabs `eleven_flash_v2_5` streams the spoken response. API
 clients select this mode with `use_realtime=true` and may set only the ElevenLabs `voice_id` for
-the Realtime path. `realtime_provider`, `realtime_model`, `voice_provider`, `tts_provider`, and
-`tts_model` are canonicalized by the Backend and are not customer-controlled.
+the Realtime path. `realtime_provider`, `realtime_model`, and `voice_provider` are read-only;
+`tts_provider` and `tts_model` remain writable only for Pipeline agents and are ignored and
+canonicalized by the Backend whenever `use_realtime=true`.
 
 ```json
 {
