@@ -1,8 +1,15 @@
 import uuid
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+from typing import Any, Optional
+from pydantic import BaseModel, Field, field_validator
 from app.modules.agents.models import AgentStatus
+
+
+REALTIME_PROVIDER = "openai"
+REALTIME_MODEL = "gpt-realtime"
+REALTIME_TTS_PROVIDER = "elevenlabs"
+REALTIME_TTS_MODEL = "eleven_flash_v2_5"
+DEFAULT_REALTIME_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 
 
 class AgentCreate(BaseModel):
@@ -11,11 +18,9 @@ class AgentCreate(BaseModel):
     language: str = "en"
     # ── Realtime mode ─────────────────────────────────────────────────────────
     use_realtime: bool = False
-    realtime_provider: Optional[str] = None
-    realtime_model: Optional[str] = None
     # ── Pipeline mode ─────────────────────────────────────────────────────────
     voice_provider: Optional[str] = None
-    voice_id: Optional[str] = None
+    voice_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     tts_provider: Optional[str] = None
     tts_model: Optional[str] = None
     stt_provider: Optional[str] = None
@@ -32,10 +37,8 @@ class AgentUpdate(BaseModel):
     business_type: Optional[str] = None
     language: Optional[str] = None
     use_realtime: Optional[bool] = None
-    realtime_provider: Optional[str] = None
-    realtime_model: Optional[str] = None
     voice_provider: Optional[str] = None
-    voice_id: Optional[str] = None
+    voice_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     tts_provider: Optional[str] = None
     tts_model: Optional[str] = None
     stt_provider: Optional[str] = None
@@ -73,12 +76,38 @@ class AgentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ElevenLabsVoice(BaseModel):
+    voice_id: str
+    name: str
+    category: str | None = None
+    description: str | None = None
+    preview_url: str | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
+    verified_languages: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("labels", mode="before")
+    @classmethod
+    def normalize_nullable_labels(cls, value: Any) -> Any:
+        return value or {}
+
+    @field_validator("verified_languages", mode="before")
+    @classmethod
+    def normalize_nullable_languages(cls, value: Any) -> Any:
+        return value or []
+
+
+class ElevenLabsVoiceListResponse(BaseModel):
+    voices: list[ElevenLabsVoice]
+    total: int
+    cached: bool
+
+
 class AgentTemplate(BaseModel):
     business_type: str
     name: str
     language: str
     use_realtime: bool = False
-    # Realtime: one provider+model handles STT+LLM+TTS in a single WebSocket session
+    # Realtime: OpenAI handles audio input and text output; ElevenLabs renders speech.
     realtime_provider: Optional[str] = None
     realtime_model: Optional[str] = None
     # Pipeline: separate providers per stage
@@ -101,10 +130,12 @@ AGENT_TEMPLATES: list[AgentTemplate] = [
         name="Car Rental Booking Agent (Realtime)",
         language="en",
         use_realtime=True,
-        realtime_provider="openai",
-        realtime_model="gpt-4o-realtime-preview",
-        voice_provider="openai",
-        voice_id="alloy",
+        realtime_provider=REALTIME_PROVIDER,
+        realtime_model=REALTIME_MODEL,
+        voice_provider=REALTIME_TTS_PROVIDER,
+        voice_id=DEFAULT_REALTIME_VOICE_ID,
+        tts_provider=REALTIME_TTS_PROVIDER,
+        tts_model=REALTIME_TTS_MODEL,
         system_prompt=(
             "You are a professional car rental booking assistant. Help customers reserve vehicles. "
             "Collect: vehicle type, pickup location, pickup date, return date, and customer contact. "
@@ -117,10 +148,12 @@ AGENT_TEMPLATES: list[AgentTemplate] = [
         name="Restaurant Reservation Agent (Realtime)",
         language="en",
         use_realtime=True,
-        realtime_provider="openai",
-        realtime_model="gpt-4o-realtime-preview",
-        voice_provider="openai",
-        voice_id="nova",
+        realtime_provider=REALTIME_PROVIDER,
+        realtime_model=REALTIME_MODEL,
+        voice_provider=REALTIME_TTS_PROVIDER,
+        voice_id="21m00Tcm4TlvDq8ikWAM",
+        tts_provider=REALTIME_TTS_PROVIDER,
+        tts_model=REALTIME_TTS_MODEL,
         system_prompt=(
             "You are a friendly restaurant reservation assistant. Help customers make table reservations. "
             "Ask for: date, time, number of guests, and branch preference. "

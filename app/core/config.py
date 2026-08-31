@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     TTS_PREVIEW_MODEL: str = "tts-1"
     TTS_PREVIEW_TIMEOUT_SECONDS: float = 20.0
 
+    # ElevenLabs voice catalog used by authenticated Dashboard users
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_API_BASE_URL: str = "https://api.elevenlabs.io"
+    ELEVENLABS_REQUEST_TIMEOUT_SECONDS: float = 15.0
+    ELEVENLABS_VOICE_CACHE_SECONDS: int = 300
+
     # Encryption
     CREDENTIAL_ENCRYPTION_KEY: str = "change-me-generate-with-fernet-keygen"
 

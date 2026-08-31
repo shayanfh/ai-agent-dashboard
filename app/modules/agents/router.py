@@ -5,8 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser, require_company_admin
 from app.modules.agents.models import AgentStatus
-from app.modules.agents.schemas import AgentCreate, AgentUpdate, AgentResponse, AgentTemplate, AGENT_TEMPLATES
+from app.modules.agents.schemas import (
+    AGENT_TEMPLATES,
+    AgentCreate,
+    AgentResponse,
+    AgentTemplate,
+    AgentUpdate,
+    ElevenLabsVoiceListResponse,
+)
 from app.modules.agents.service import AgentService
+from app.modules.agents.voice_catalog import voice_catalog
 from app.core.schemas import PaginatedResponse
 
 router = APIRouter()
@@ -15,6 +23,13 @@ router = APIRouter()
 @router.get("/templates", response_model=list[AgentTemplate])
 async def get_templates():
     return AGENT_TEMPLATES
+
+
+@router.get("/voices", response_model=ElevenLabsVoiceListResponse)
+async def list_elevenlabs_voices(
+    _current_user: CurrentUser = Depends(require_company_admin),
+):
+    return await voice_catalog.list_voices()
 
 
 @router.get("", response_model=PaginatedResponse[AgentResponse])

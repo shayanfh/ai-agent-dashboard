@@ -69,6 +69,85 @@ async def test_create_agent_full(
     assert data["llm_model"] == "gpt-4.1-mini"
 
 
+@pytest.mark.asyncio
+async def test_realtime_agent_uses_fixed_models_and_selected_elevenlabs_voice(
+    client: AsyncClient,
+    admin_a_token: str,
+):
+    response = await client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Realtime Agent",
+            "use_realtime": True,
+            "voice_id": "custom-elevenlabs-voice",
+            "voice_provider": "openai",
+            "tts_provider": "openai",
+            "tts_model": "customer-controlled-model",
+            "stt_provider": "deepgram",
+            "llm_provider": "openai",
+            "llm_model": "customer-controlled-llm",
+        },
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["realtime_provider"] == "openai"
+    assert data["realtime_model"] == "gpt-realtime"
+    assert data["voice_provider"] == "elevenlabs"
+    assert data["voice_id"] == "custom-elevenlabs-voice"
+    assert data["tts_provider"] == "elevenlabs"
+    assert data["tts_model"] == "eleven_flash_v2_5"
+    assert data["stt_provider"] is None
+    assert data["llm_provider"] is None
+
+
+@pytest.mark.asyncio
+async def test_realtime_model_is_not_customer_writable(
+    client: AsyncClient,
+    admin_a_token: str,
+):
+    response = await client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Fixed Realtime Model",
+            "use_realtime": True,
+            "realtime_provider": "customer-provider",
+            "realtime_model": "customer-model",
+        },
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["realtime_provider"] == "openai"
+    assert response.json()["realtime_model"] == "gpt-realtime"
+
+
+@pytest.mark.asyncio
+async def test_updating_legacy_realtime_agent_replaces_openai_voice(
+    client: AsyncClient,
+    admin_a_token: str,
+    agent_a: Agent,
+):
+    agent_a.use_realtime = True
+    agent_a.realtime_provider = "openai"
+    agent_a.realtime_model = "gpt-4o-realtime-preview"
+    agent_a.voice_provider = "openai"
+    agent_a.voice_id = "alloy"
+
+    response = await client.patch(
+        f"/api/v1/agents/{agent_a.id}",
+        json={"greeting_message": "Realtime greeting"},
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["realtime_model"] == "gpt-realtime"
+    assert data["voice_provider"] == "elevenlabs"
+    assert data["voice_id"] == "JBFqnCBsd6RMkjVDRZzb"
+
+
 # ---------------------------------------------------------------------------
 # Read
 # ---------------------------------------------------------------------------

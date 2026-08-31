@@ -602,6 +602,37 @@ objects require a temporary presigned URL returned by
 
 ### Resolve Agent Example
 
+Realtime agents use a server-owned hybrid pipeline: OpenAI `gpt-realtime` receives the caller's
+audio and returns text, then ElevenLabs `eleven_flash_v2_5` streams the spoken response. API
+clients select this mode with `use_realtime=true` and may set only the ElevenLabs `voice_id` for
+the Realtime path. `realtime_provider`, `realtime_model`, `voice_provider`, `tts_provider`, and
+`tts_model` are canonicalized by the Backend and are not customer-controlled.
+
+```json
+{
+  "name": "Realtime Sales Agent",
+  "language": "en",
+  "use_realtime": true,
+  "voice_id": "JBFqnCBsd6RMkjVDRZzb"
+}
+```
+
+Pipeline agents (`use_realtime=false`) may continue to configure their separate STT, LLM, and TTS
+fields. Apply migration `0012_realtime_elevenlabs` after deploying this change; it converts
+existing Realtime agents to the fixed hybrid configuration.
+
+Authenticated Company Admins can populate the voice selector from the platform's complete
+ElevenLabs workspace catalog:
+
+```http
+GET /api/v1/agents/voices
+```
+
+The response includes each `voice_id`, display name, category, labels, verified languages, and
+`preview_url`. Results are cached for `ELEVENLABS_VOICE_CACHE_SECONDS`. Configure
+`ELEVENLABS_API_KEY` in the Backend as well as the Voice Agent. The API key is server-only and is
+never included in the response.
+
 ```bash
 curl -H "X-Internal-Api-Key: your-key" \
   "http://localhost:8000/api/v1/internal/voice/resolve-agent?phone_number=%2B96880001234"
