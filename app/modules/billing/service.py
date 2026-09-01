@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import CurrentUser
 from app.core.exceptions import (
     ConflictError,
@@ -36,7 +37,7 @@ from app.modules.billing.schemas import (
     PlanResponse,
     SubscriptionResponse,
 )
-from app.modules.calls.models import Call
+from app.modules.calls.models import Call, CallSource
 from app.modules.companies.models import Company
 from app.modules.integrations.models import Integration
 
@@ -117,6 +118,19 @@ class BillingService:
             )
             or 0
         )
+        web_test_seconds = int(
+            (
+                await self.db.scalar(
+                    select(func.coalesce(func.sum(Call.duration_seconds), 0)).where(
+                        Call.company_id == company_id,
+                        Call.source == CallSource.WEB_TEST,
+                        Call.started_at >= subscription.current_period_start,
+                        Call.started_at < subscription.current_period_end,
+                    )
+                )
+            )
+            or 0
+        )
         agent_count = int(
             (await self.db.scalar(select(func.count(Agent.id)).where(Agent.company_id == company_id)))
             or 0
@@ -141,6 +155,9 @@ class BillingService:
             minutes_used=minutes_used,
             minutes_included=plan.monthly_minutes,
             minutes_remaining=minutes_remaining,
+            telephony_minutes_used=round((seconds - web_test_seconds) / 60, 2),
+            web_test_minutes_used=round(web_test_seconds / 60, 2),
+            web_test_max_duration_seconds_per_call=settings.WEB_TEST_CALL_MAX_DURATION_SECONDS,
             agent_count=agent_count,
             agent_limit=plan.max_agents,
             integration_count=integration_count,

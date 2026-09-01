@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.modules.calls.models import Call, CallMessage, CallStatus, CallOutcome
+from app.modules.calls.models import Call, CallMessage, CallSource, CallStatus, CallOutcome
 
 
 class CallRepository:
@@ -23,6 +23,7 @@ class CallRepository:
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
         was_transferred: Optional[bool] = None,
+        source: Optional[CallSource] = None,
     ) -> tuple[List[Call], int]:
         offset = (page - 1) * page_size
         query = select(Call).where(Call.company_id == company_id)
@@ -40,6 +41,8 @@ class CallRepository:
             query = query.where(Call.started_at <= date_to)
         if was_transferred is not None:
             query = query.where(Call.was_transferred == was_transferred)
+        if source is not None:
+            query = query.where(Call.source == source)
         count_result = await self.db.execute(select(func.count()).select_from(query.subquery()))
         total = count_result.scalar_one()
         result = await self.db.execute(

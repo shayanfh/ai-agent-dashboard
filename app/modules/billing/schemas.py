@@ -38,6 +38,9 @@ class BillingUsageResponse(BaseModel):
     minutes_used: float
     minutes_included: int | None
     minutes_remaining: float | None
+    telephony_minutes_used: float
+    web_test_minutes_used: float
+    web_test_max_duration_seconds_per_call: int
     agent_count: int
     agent_limit: int | None
     integration_count: int

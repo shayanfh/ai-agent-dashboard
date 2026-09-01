@@ -26,7 +26,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.core.storage import ObjectStorage, get_object_storage
 from app.modules.agents.models import Agent
 from app.modules.companies.models import Company
-from app.modules.calls.models import Call, CallStatus
+from app.modules.calls.models import Call, CallSource, CallStatus
 from app.modules.calls.schemas import (
     CallCompleteRequest,
 )
@@ -181,31 +181,52 @@ async def resolve_agent_by_id(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_internal_api_key),
 ):
-    outbound_call = await db.scalar(
+    call_context = await db.scalar(
         select(Call).where(
             Call.id == call_id,
             Call.company_id == company_id,
             Call.agent_id == agent_id,
         )
     )
-    if not outbound_call:
-        raise NotFoundError("Outbound call context not found")
-    from app.modules.outbound_campaigns.models import OutboundCampaign, OutboundRecipient
-    outbound_row = (
-        await db.execute(
-            select(OutboundCampaign, OutboundRecipient)
-            .join(OutboundRecipient, OutboundRecipient.id == outbound_call.recipient_id)
-            .where(OutboundCampaign.id == outbound_call.campaign_id)
-        )
-    ).one_or_none()
-    if not outbound_row:
-        raise NotFoundError("Outbound campaign context not found")
-    campaign, recipient = outbound_row
+    if not call_context:
+        raise NotFoundError("Call context not found")
     agent = await db.scalar(
         select(Agent).where(Agent.id == agent_id, Agent.company_id == company_id)
     )
     if not agent:
         raise NotFoundError("Agent not found")
+    knowledge_version = (
+        await db.scalar(
+            select(Company.knowledge_version).where(Company.id == company_id)
+        )
+    ) or 1
+    if call_context.source == CallSource.WEB_TEST:
+        now = datetime.now(timezone.utc)
+        call_context.status = CallStatus.IN_PROGRESS
+        call_context.answered_at = call_context.answered_at or now
+        await db.commit()
+        return ResolvedAgentResponse(
+            company_id=str(company_id), agent_id=str(agent.id), agent_name=agent.name,
+            language=agent.language, greeting_message=agent.greeting_message,
+            system_prompt=agent.system_prompt,
+            use_realtime=agent.use_realtime, realtime_provider=agent.realtime_provider,
+            realtime_model=agent.realtime_model, voice_provider=agent.voice_provider,
+            voice_id=agent.voice_id, tts_provider=agent.tts_provider,
+            tts_model=agent.tts_model, stt_provider=agent.stt_provider,
+            stt_model=agent.stt_model, llm_provider=agent.llm_provider,
+            llm_model=agent.llm_model, knowledge_version=knowledge_version,
+        )
+    from app.modules.outbound_campaigns.models import OutboundCampaign, OutboundRecipient
+    outbound_row = (
+        await db.execute(
+            select(OutboundCampaign, OutboundRecipient)
+            .join(OutboundRecipient, OutboundRecipient.id == call_context.recipient_id)
+            .where(OutboundCampaign.id == call_context.campaign_id)
+        )
+    ).one_or_none()
+    if not outbound_row:
+        raise NotFoundError("Outbound campaign context not found")
+    campaign, recipient = outbound_row
     return ResolvedAgentResponse(
         company_id=str(company_id), agent_id=str(agent.id), agent_name=agent.name,
         language=agent.language, greeting_message=agent.greeting_message,
@@ -216,7 +237,7 @@ async def resolve_agent_by_id(
         tts_model=agent.tts_model, stt_provider=agent.stt_provider,
         stt_model=agent.stt_model, llm_provider=agent.llm_provider,
         llm_model=agent.llm_model,
-        knowledge_version=(await db.scalar(select(Company.knowledge_version).where(Company.id == company_id))) or 1,
+        knowledge_version=knowledge_version,
         outbound_context={
             "campaign_name": campaign.name,
             "objective": campaign.message_text,
@@ -368,6 +389,8 @@ async def resolve_transfer_target(
     call = await db.get(Call, call_id)
     if not call:
         raise NotFoundError("Call not found")
+    if call.source == CallSource.WEB_TEST:
+        raise ConflictError("Transfers are disabled for browser test calls")
     active_target = (
         Extension.company_id == call.company_id,
         Extension.is_enabled.is_(True),

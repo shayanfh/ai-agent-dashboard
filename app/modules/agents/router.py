@@ -14,6 +14,11 @@ from app.modules.agents.schemas import (
     ElevenLabsVoiceListResponse,
 )
 from app.modules.agents.service import AgentService
+from app.modules.agents.test_calls import (
+    WebTestCallService,
+    WebTestCallSessionResponse,
+    WebTestCallUsageResponse,
+)
 from app.modules.agents.voice_catalog import voice_catalog
 from app.core.schemas import PaginatedResponse
 
@@ -30,6 +35,14 @@ async def list_elevenlabs_voices(
     _current_user: CurrentUser = Depends(require_company_admin),
 ):
     return await voice_catalog.list_voices()
+
+
+@router.get("/test-calls/usage", response_model=WebTestCallUsageResponse)
+async def get_web_test_call_usage(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await WebTestCallService(db).get_usage(current_user)
 
 
 @router.get("", response_model=PaginatedResponse[AgentResponse])
@@ -65,6 +78,19 @@ async def get_agent(
 ):
     service = AgentService(db)
     return await service.get_agent(agent_id, current_user)
+
+
+@router.post(
+    "/{agent_id}/test-calls",
+    response_model=WebTestCallSessionResponse,
+    status_code=201,
+)
+async def create_web_test_call(
+    agent_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await WebTestCallService(db).create_session(agent_id, current_user)
 
 
 @router.patch("/{agent_id}", response_model=AgentResponse)

@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.dependencies import CurrentUser
-from app.modules.calls.models import CallStatus, CallOutcome
+from app.modules.calls.models import CallSource, CallStatus, CallOutcome
 from app.modules.calls.repository import CallRepository
 from app.modules.calls.schemas import (
     CallCreate, CallUpdate, CallCompleteRequest, CallMessageCreate,
@@ -53,11 +54,12 @@ class CallService:
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
         was_transferred: Optional[bool] = None,
+        source: Optional[CallSource] = None,
     ) -> PaginatedResponse[CallResponse]:
         company_id = self._get_company_id(current_user)
         calls, total = await self.repo.get_by_company(
             company_id, page, page_size, agent_id, status, outcome,
-            caller_number, date_from, date_to, was_transferred,
+            caller_number, date_from, date_to, was_transferred, source,
         )
         return PaginatedResponse(
             items=[CallResponse.model_validate(c) for c in calls],
@@ -144,6 +146,8 @@ class CallService:
                 else ended_at - call.started_at
             )
             duration = int(delta.total_seconds())
+        if call.source == CallSource.WEB_TEST and duration is not None:
+            duration = min(duration, settings.WEB_TEST_CALL_MAX_DURATION_SECONDS)
 
         update_data = {
             "status": CallStatus.COMPLETED,

@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.schemas import PaginatedResponse
 from app.core.storage import ObjectStorage, get_object_storage
-from app.modules.calls.models import CallOutcome, CallStatus
+from app.modules.calls.models import CallOutcome, CallSource, CallStatus
 from app.modules.calls.schemas import (
     CallCompleteRequest,
     CallCreate,
@@ -36,13 +36,14 @@ async def list_calls(
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     was_transferred: Optional[bool] = None,
+    source: Optional[CallSource] = None,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     service = CallService(db)
     return await service.list_calls(
         current_user, page, page_size, agent_id, status, outcome,
-        caller_number, date_from, date_to, was_transferred,
+        caller_number, date_from, date_to, was_transferred, source,
     )
 
 

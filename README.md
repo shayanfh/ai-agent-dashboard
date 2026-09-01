@@ -83,6 +83,8 @@ docker compose exec api python -m scripts.seed
 | `LIVEKIT_API_SECRET` | Server-side LiveKit API secret | — |
 | `LIVEKIT_SIP_ENDPOINT` | LiveKit SIP hostname, without `sip:` | — |
 | `LIVEKIT_AGENT_NAME` | Agent dispatched for inbound calls | `ai-agent-dashboard-inbound` |
+| `WEB_TEST_CALL_MAX_DURATION_SECONDS` | Hard browser test-call limit | `600` |
+| `WEB_TEST_CALL_TOKEN_TTL_SECONDS` | Browser join-token validity, including setup time | `660` |
 | `ASTERISK_PROVISIONER_URL` | Private URL of the central FreePBX provisioner | — |
 | `ASTERISK_PROVISIONER_API_KEY` | Shared secret for the provisioner API | — |
 | `ASTERISK_PUBLIC_SIP_URI` | Public Asterisk SIP URI used as the provider destination | — |
@@ -633,6 +635,51 @@ The response includes each `voice_id`, display name, category, labels, verified 
 `preview_url`. Results are cached for `ELEVENLABS_VOICE_CACHE_SECONDS`. Configure
 `ELEVENLABS_API_KEY` in the Backend as well as the Voice Agent. The API key is server-only and is
 never included in the response.
+
+### Browser test calls
+
+An authenticated tenant user can test any Agent belonging to their company without connecting a
+phone number:
+
+```http
+POST /api/v1/agents/{agent_id}/test-calls
+GET  /api/v1/agents/test-calls/usage
+```
+
+The POST response contains `livekit_url`, a short-lived `access_token`, `room_name`, `call_id`,
+`participant_identity`, `max_duration_seconds`, and `expires_at`. The token is restricted to that
+single room, can publish only microphone audio, and explicitly dispatches
+`LIVEKIT_AGENT_NAME`. Never expose `LIVEKIT_API_SECRET` in the frontend.
+
+Minimal browser integration with `livekit-client`:
+
+```ts
+import { Room } from "livekit-client";
+
+const session = await api.post(`/api/v1/agents/${agentId}/test-calls`);
+const room = new Room();
+await room.connect(session.livekit_url, session.access_token);
+await room.localParticipant.setMicrophoneEnabled(true);
+
+// Stop button / component cleanup
+room.disconnect();
+```
+
+Start the visible countdown from `max_duration_seconds` after `room.connect()` succeeds. The Voice
+Agent closes the session at 600 seconds even if the browser timer is bypassed. Browser test calls
+use the Agent's normal greeting, models, selected voice, prompt, Knowledge Base, transcript,
+summary, outcome, and extracted-data pipeline. SIP transfer is intentionally unavailable: the
+transfer tool is not exposed to the model, and the internal transfer endpoint rejects test Calls.
+
+Each session is stored in `calls` with `source=web_test`; normal calls use `source=telephony`.
+`GET /api/v1/agents/test-calls/usage` returns test seconds/minutes for the current subscription
+period. `GET /api/v1/billing/usage` includes test usage in `minutes_used` and additionally returns
+`telephony_minutes_used`, `web_test_minutes_used`, and
+`web_test_max_duration_seconds_per_call`. The calls list can be filtered with
+`GET /api/v1/calls?source=web_test`.
+
+The Dashboard origin must be present in `CORS_ORIGINS`, and the browser must be allowed to use its
+microphone. Apply migration `0013_web_test_calls` and deploy the Backend and Voice Agent together.
 
 ```bash
 curl -H "X-Internal-Api-Key: your-key" \

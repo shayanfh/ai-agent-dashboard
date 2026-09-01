@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     LIVEKIT_API_SECRET: str = ""
     LIVEKIT_SIP_ENDPOINT: str = ""
     LIVEKIT_AGENT_NAME: str = "ai-agent-dashboard-inbound"
+    WEB_TEST_CALL_MAX_DURATION_SECONDS: int = 600
+    WEB_TEST_CALL_TOKEN_TTL_SECONDS: int = 660
 
     # Shared FreePBX gateway provisioning (through its Asterisk engine)
     ASTERISK_PROVISIONER_URL: str = ""

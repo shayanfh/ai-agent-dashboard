@@ -31,6 +31,11 @@ class CallDirection(str, Enum):
     OUTBOUND = "outbound"
 
 
+class CallSource(str, Enum):
+    TELEPHONY = "telephony"
+    WEB_TEST = "web_test"
+
+
 class CallOutcome(str, Enum):
     BOOKING_CREATED = "booking_created"
     INFORMATION_REQUEST = "information_request"
@@ -73,6 +78,9 @@ class Call(Base):
     )
     direction: Mapped[CallDirection] = mapped_column(
         EnumByValue(CallDirection, "call_direction"), default=CallDirection.INBOUND
+    )
+    source: Mapped[CallSource] = mapped_column(
+        String(20), default=CallSource.TELEPHONY, nullable=False
     )
     caller_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     destination_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
