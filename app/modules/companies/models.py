@@ -34,6 +34,9 @@ class Company(Base):
     phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     country: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, nullable=True
+    )
     business_hours: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[CompanyStatus] = mapped_column(
         EnumByValue(CompanyStatus, "company_status"), default=CompanyStatus.ACTIVE

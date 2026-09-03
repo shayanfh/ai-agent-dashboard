@@ -93,6 +93,19 @@ class PlanChangeRequest(BaseModel):
     plan_id: uuid.UUID
 
 
+class StripeCheckoutRequest(BaseModel):
+    plan_id: uuid.UUID
+
+
+class StripeCheckoutResponse(BaseModel):
+    session_id: str
+    checkout_url: str
+
+
+class StripePortalResponse(BaseModel):
+    portal_url: str
+
+
 class PlanChangeResponse(BaseModel):
     subscription: SubscriptionResponse
     invoice: InvoiceResponse | None
@@ -107,6 +120,7 @@ class AdminPlanCreate(BaseModel):
     max_integrations: int | None = Field(default=None, ge=0)
     price_monthly_minor: int = Field(default=0, ge=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    stripe_price_id: str | None = Field(default=None, min_length=3, max_length=255)
     is_active: bool = True
 
     @field_validator("currency")
@@ -122,6 +136,7 @@ class AdminPlanUpdate(BaseModel):
     max_integrations: int | None = Field(default=None, ge=0)
     price_monthly_minor: int | None = Field(default=None, ge=0)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    stripe_price_id: str | None = Field(default=None, min_length=3, max_length=255)
     is_active: bool | None = None
 
     @field_validator("currency")

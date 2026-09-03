@@ -1,7 +1,7 @@
 # ruff: noqa: B008
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,9 +14,18 @@ from app.modules.billing.schemas import (
     PlanChangeRequest,
     PlanChangeResponse,
     PlanResponse,
+    StripeCheckoutRequest,
+    StripeCheckoutResponse,
+    StripePortalResponse,
     SubscriptionResponse,
 )
 from app.modules.billing.service import BillingService
+from app.modules.billing.stripe_gateway import (
+    StripeGateway,
+    StripeWebhookError,
+    get_stripe_gateway,
+)
+from app.modules.billing.stripe_service import StripeBillingService
 
 router = APIRouter()
 
@@ -84,13 +93,58 @@ async def change_plan(
 async def cancel_subscription(
     current_user: CurrentUser = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
 ):
-    return await BillingService(db).set_cancel_at_period_end(current_user, True)
+    return await StripeBillingService(db, gateway).set_stripe_cancellation(
+        current_user, True
+    )
 
 
 @router.post("/subscription/resume", response_model=SubscriptionResponse)
 async def resume_subscription(
     current_user: CurrentUser = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
 ):
-    return await BillingService(db).set_cancel_at_period_end(current_user, False)
+    return await StripeBillingService(db, gateway).set_stripe_cancellation(
+        current_user, False
+    )
+
+
+@router.post("/stripe/checkout-session", response_model=StripeCheckoutResponse)
+async def create_stripe_checkout_session(
+    data: StripeCheckoutRequest,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
+):
+    return await StripeBillingService(db, gateway).create_checkout(
+        data.plan_id, current_user
+    )
+
+
+@router.post("/stripe/portal-session", response_model=StripePortalResponse)
+async def create_stripe_portal_session(
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
+):
+    return await StripeBillingService(db, gateway).create_portal(current_user)
+
+
+@router.post("/stripe/webhook", include_in_schema=False)
+async def stripe_webhook(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
+    db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
+):
+    if not stripe_signature:
+        raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
+    payload = await request.body()
+    try:
+        event = gateway.construct_webhook_event(payload, stripe_signature)
+    except StripeWebhookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await StripeBillingService(db, gateway).process_webhook(event)
+    return {"received": True}

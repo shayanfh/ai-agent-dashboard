@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Stripe Billing (server-side secrets only)
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_CHECKOUT_SUCCESS_URL: str = ""
+    STRIPE_CHECKOUT_CANCEL_URL: str = ""
+
     # Public website voice preview
     OPENAI_API_KEY: str = ""
     TTS_PREVIEW_MODEL: str = "tts-1"

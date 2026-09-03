@@ -972,6 +972,49 @@ verifying its webhook first and then recording the provider reference through
 this API. Reusing the same external reference is idempotent only when invoice and
 amount are identical.
 
+### Stripe Checkout
+
+Stripe-hosted Checkout and the Customer Portal are available for company admins:
+
+```http
+POST /api/v1/billing/stripe/checkout-session
+POST /api/v1/billing/stripe/portal-session
+POST /api/v1/billing/stripe/webhook
+```
+
+Send only the internal `plan_id` to the Checkout endpoint. The API resolves the
+trusted `stripe_price_id` configured on the plan and returns `session_id` and
+`checkout_url`. Redirect the browser to that URL. Do not activate access from
+the frontend success redirect; the signed webhook activates the plan.
+
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in `.env`. Optionally set
+`STRIPE_CHECKOUT_SUCCESS_URL` and `STRIPE_CHECKOUT_CANCEL_URL`; otherwise they
+default to the `/billing` page under `FRONTEND_URL`. Configure the Stripe webhook
+destination as:
+
+```text
+https://<API_DOMAIN>/api/v1/billing/stripe/webhook
+```
+
+Subscribe it to `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `invoice.paid`,
+`invoice.payment_failed`, `customer.subscription.updated`, and
+`customer.subscription.deleted`. Webhook event IDs are persisted so duplicate
+deliveries are safe. Successful renewal invoices and payments are mirrored into
+the local billing history.
+
+Each paid local plan must have a recurring Stripe Price ID. A super admin can
+set it through `POST /api/v1/admin/billing/plans` or `PATCH` the existing plan:
+
+```json
+{
+  "stripe_price_id": "price_..."
+}
+```
+
+Once a company has a Stripe subscription, use the Customer Portal for later
+plan changes, payment-method updates, invoices, and cancellation management.
+
 Apply the schema before using these endpoints:
 
 ```bash
