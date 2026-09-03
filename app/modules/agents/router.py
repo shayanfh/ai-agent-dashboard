@@ -32,9 +32,10 @@ async def get_templates():
 
 @router.get("/voices", response_model=ElevenLabsVoiceListResponse)
 async def list_elevenlabs_voices(
+    force_refresh: bool = Query(False),
     _current_user: CurrentUser = Depends(require_company_admin),
 ):
-    return await voice_catalog.list_voices()
+    return await voice_catalog.list_voices(force_refresh=force_refresh)
 
 
 @router.get("/test-calls/usage", response_model=WebTestCallUsageResponse)

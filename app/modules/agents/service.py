@@ -20,6 +20,7 @@ from app.modules.agents.schemas import (
 )
 from app.core.schemas import PaginatedResponse
 from app.modules.billing.entitlements import EntitlementService
+from app.modules.agents.voice_catalog import voice_catalog
 
 
 class AgentService:
@@ -97,7 +98,12 @@ class AgentService:
         await self.entitlements.require_resource_capacity(company_id, "agents")
         agent_data = data.model_dump()
         if data.use_realtime:
+            await voice_catalog.ensure_voice_in_my_voices(
+                data.voice_id or DEFAULT_REALTIME_VOICE_ID
+            )
             self._apply_realtime_configuration(agent_data)
+        elif (data.tts_provider or "").lower() == "elevenlabs" and data.voice_id:
+            await voice_catalog.ensure_voice_in_my_voices(data.voice_id)
         else:
             agent_data.update(realtime_provider=None, realtime_model=None)
         agent_data["company_id"] = company_id
@@ -115,6 +121,12 @@ class AgentService:
             raise NotFoundError("Agent not found")
         values = data.model_dump(exclude_none=True)
         use_realtime = values.get("use_realtime", agent.use_realtime)
+        selected_voice_id = values.get("voice_id")
+        selected_tts_provider = values.get("tts_provider", agent.tts_provider)
+        if selected_voice_id and (
+            use_realtime or (selected_tts_provider or "").lower() == "elevenlabs"
+        ):
+            await voice_catalog.ensure_voice_in_my_voices(selected_voice_id)
         if use_realtime:
             self._apply_realtime_configuration(
                 values,

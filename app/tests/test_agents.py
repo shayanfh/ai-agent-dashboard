@@ -12,6 +12,7 @@ Covers:
 
 import pytest
 from httpx import AsyncClient
+from unittest.mock import AsyncMock
 
 from app.modules.agents.models import Agent
 
@@ -76,7 +77,13 @@ async def test_realtime_agent_uses_fixed_models_and_selected_elevenlabs_voice(
     client: AsyncClient,
     admin_a_token: str,
     active_subscription_a,
+    monkeypatch,
 ):
+    ensure_voice = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "app.modules.agents.service.voice_catalog.ensure_voice_in_my_voices",
+        ensure_voice,
+    )
     response = await client.post(
         "/api/v1/agents",
         json={
@@ -102,6 +109,7 @@ async def test_realtime_agent_uses_fixed_models_and_selected_elevenlabs_voice(
     assert data["tts_model"] == "eleven_flash_v2_5"
     assert data["stt_provider"] is None
     assert data["llm_provider"] is None
+    ensure_voice.assert_awaited_once_with("custom-elevenlabs-voice")
 
 
 @pytest.mark.asyncio

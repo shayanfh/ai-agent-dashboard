@@ -85,18 +85,13 @@ class ElevenLabsVoice(BaseModel):
     description: str | None = None
     preview_url: str | None = None
     labels: dict[str, str] = Field(default_factory=dict)
-    verified_languages: list[dict[str, Any]] = Field(default_factory=list)
+    public_owner_id: str | None = None
+    in_my_voices: bool = False
 
     @field_validator("labels", mode="before")
     @classmethod
     def normalize_nullable_labels(cls, value: Any) -> Any:
         return value or {}
-
-    @field_validator("verified_languages", mode="before")
-    @classmethod
-    def normalize_nullable_languages(cls, value: Any) -> Any:
-        return value or []
-
 
 class ElevenLabsVoiceListResponse(BaseModel):
     voices: list[ElevenLabsVoice]

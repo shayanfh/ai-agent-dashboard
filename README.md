@@ -624,17 +624,49 @@ Pipeline agents (`use_realtime=false`) may continue to configure their separate 
 fields. Apply migration `0012_realtime_elevenlabs` after deploying this change; it converts
 existing Realtime agents to the fixed hybrid configuration.
 
-Authenticated Company Admins can populate the voice selector from the platform's complete
-ElevenLabs workspace catalog:
+Authenticated Company Admins populate the voice selector from one unified
+catalog endpoint:
 
 ```http
 GET /api/v1/agents/voices
 ```
 
-The response includes each `voice_id`, display name, category, labels, verified languages, and
-`preview_url`. Results are cached for `ELEVENLABS_VOICE_CACHE_SECONDS`. Configure
-`ELEVENLABS_API_KEY` in the Backend as well as the Voice Agent. The API key is server-only and is
-never included in the response.
+The Backend reads every page from both ElevenLabs **My Voices** and the public
+Voice Library, merges duplicate `voice_id` values, and returns the complete
+result. It does not expose `verified_languages`. Example response:
+
+```json
+{
+  "voices": [
+    {
+      "public_owner_id": "PUBLIC_OWNER_ID",
+      "voice_id": "VOICE_ID",
+      "name": "Sales Voice",
+      "category": "professional",
+      "preview_url": "https://...",
+      "labels": {"language": "en", "gender": "female"},
+      "public_owner_id": "PUBLIC_OWNER_ID",
+      "in_my_voices": false
+    }
+  ],
+  "total": 745,
+  "cached": false
+}
+```
+
+Results are cached for `ELEVENLABS_VOICE_CACHE_SECONDS`; use
+`GET /api/v1/agents/voices?force_refresh=true` when an immediate refresh is
+needed. Configure `ELEVENLABS_API_KEY` in the Backend as well as the Voice Agent.
+The key is server-only and is never included in responses.
+
+The frontend only sends the selected `voice_id` in the normal Agent create or
+update request. For Realtime Agents, and pipeline Agents whose `tts_provider` is
+`elevenlabs`, the Backend checks My Voices before saving. If the selected public
+voice is missing, it finds its `public_owner_id` from the full library and adds
+it to My Voices automatically. Existing My Voices are not added again. An
+unknown `voice_id` returns `VALIDATION_ERROR`; an ElevenLabs failure returns
+`INTEGRATION_ERROR`. Voice Library access and My Voices limits remain subject to
+the ElevenLabs account plan.
 
 ### Browser test calls
 
