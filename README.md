@@ -325,8 +325,8 @@ Useful lifecycle endpoints:
 - `DELETE /api/v1/phone-numbers/{phone_number_id}` — disconnects provider resources first, then
   deletes the connection and number mapping
 
-The former `/api/v1/phone-connections` endpoints remain available as deprecated compatibility
-aliases. New dashboard and API integrations should only use `/api/v1/phone-numbers`.
+The former `/api/v1/phone-connections` compatibility endpoints have been removed. All dashboard
+and API integrations must use `/api/v1/phone-numbers`.
 
 `ip_trunk` initially becomes `awaiting_provider_setup`, registration becomes `registering`, and
 Twilio becomes `testing`. A successful test or first resolved inbound call activates the mapping.

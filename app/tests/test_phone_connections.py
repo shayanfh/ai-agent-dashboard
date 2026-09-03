@@ -164,7 +164,7 @@ async def test_generic_sip_connection_provisions_and_returns_one_time_setup(
 ):
     headers = {"Authorization": f"Bearer {admin_a_token}"}
     created = await client.post(
-        "/api/v1/phone-connections",
+        "/api/v1/phone-numbers",
         headers=headers,
         json={
             "name": "Primary SIP",
@@ -179,18 +179,18 @@ async def test_generic_sip_connection_provisions_and_returns_one_time_setup(
     assert "password" not in created.text
 
     provisioned = await client.post(
-        f"/api/v1/phone-connections/{created.json()['id']}/provision",
+        f"/api/v1/phone-numbers/{created.json()['id']}/provision",
         headers=headers,
     )
     assert provisioned.status_code == 200, provisioned.text
     body = provisioned.json()
-    assert body["connection"]["status"] == "awaiting_provider_setup"
+    assert body["phone_number"]["status"] == "awaiting_provider_setup"
     assert body["provider_setup"]["gateway"] == "asterisk"
     assert body["provider_setup"]["provider_action_required"] is True
     assert body["provider_setup"]["destination_sip_uri"].startswith("sip:+96824000000@")
 
     connection = await db_session.get(
-        TelephonyConnection, uuid.UUID(created.json()["id"])
+        TelephonyConnection, uuid.UUID(created.json()["connection_id"])
     )
     phone = await db_session.scalar(
         select(PhoneNumber).where(PhoneNumber.connection_id == connection.id)
@@ -210,7 +210,7 @@ async def test_first_inbound_call_activates_phone_connection(
 ):
     headers = {"Authorization": f"Bearer {admin_a_token}"}
     created = await client.post(
-        "/api/v1/phone-connections",
+        "/api/v1/phone-numbers",
         headers=headers,
         json={
             "name": "Verified SIP",
@@ -224,7 +224,7 @@ async def test_first_inbound_call_activates_phone_connection(
         },
     )
     await client.post(
-        f"/api/v1/phone-connections/{created.json()['id']}/provision",
+        f"/api/v1/phone-numbers/{created.json()['id']}/provision",
         headers=headers,
     )
 
@@ -236,7 +236,7 @@ async def test_first_inbound_call_activates_phone_connection(
     assert inbound.status_code == 201, inbound.text
 
     connection = await db_session.get(
-        TelephonyConnection, uuid.UUID(created.json()["id"])
+        TelephonyConnection, uuid.UUID(created.json()["connection_id"])
     )
     phone = await db_session.scalar(
         select(PhoneNumber).where(PhoneNumber.connection_id == connection.id)
@@ -263,8 +263,8 @@ async def test_duplicate_phone_connection_is_rejected(
             "allowed_addresses": ["203.0.113.10/32"],
         },
     }
-    first = await client.post("/api/v1/phone-connections", headers=headers, json=payload)
-    second = await client.post("/api/v1/phone-connections", headers=headers, json=payload)
+    first = await client.post("/api/v1/phone-numbers", headers=headers, json=payload)
+    second = await client.post("/api/v1/phone-numbers", headers=headers, json=payload)
     assert first.status_code == 201
     assert second.status_code == 409
 
@@ -277,7 +277,7 @@ async def test_other_company_cannot_read_phone_connection(
     admin_b_token: str,
 ):
     created = await client.post(
-        "/api/v1/phone-connections",
+        "/api/v1/phone-numbers",
         headers={"Authorization": f"Bearer {admin_a_token}"},
         json={
             "name": "Company A SIP",
@@ -291,7 +291,7 @@ async def test_other_company_cannot_read_phone_connection(
         },
     )
     response = await client.get(
-        f"/api/v1/phone-connections/{created.json()['id']}",
+        f"/api/v1/phone-numbers/{created.json()['id']}",
         headers={"Authorization": f"Bearer {admin_b_token}"},
     )
     assert response.status_code == 404
@@ -308,7 +308,7 @@ async def test_twilio_connection_configures_elastic_sip_without_exposing_token(
     auth_token = "super-secret-twilio-token"
     phone_number_sid = "PN" + ("2" * 32)
     created = await client.post(
-        "/api/v1/phone-connections",
+        "/api/v1/phone-numbers",
         headers=headers,
         json={
             "name": "Twilio primary",
@@ -326,12 +326,12 @@ async def test_twilio_connection_configures_elastic_sip_without_exposing_token(
     assert auth_token not in created.text
 
     provisioned = await client.post(
-        f"/api/v1/phone-connections/{created.json()['id']}/provision",
+        f"/api/v1/phone-numbers/{created.json()['id']}/provision",
         headers=headers,
     )
     assert provisioned.status_code == 200, provisioned.text
     assert provisioned.json()["provider_setup"]["configured_automatically"] is True
-    assert provisioned.json()["connection"]["external_trunk_id"].startswith("TK")
+    assert provisioned.json()["phone_number"]["external_trunk_id"].startswith("TK")
     assert FakeTwilioClient.calls[0][0:2] == (account_sid, auth_token)
     assert FakeTwilioClient.calls[0][2]["phone_number_sid"] == phone_number_sid
     assert FakeTwilioClient.calls[0][2]["target_sip_uri"] == (
@@ -348,7 +348,7 @@ async def test_generic_sip_registration_is_configured_on_asterisk(
 ):
     headers = {"Authorization": f"Bearer {admin_a_token}"}
     created = await client.post(
-        "/api/v1/phone-connections",
+        "/api/v1/phone-numbers",
         headers=headers,
         json={
             "name": "Registered provider",
@@ -365,12 +365,12 @@ async def test_generic_sip_registration_is_configured_on_asterisk(
         },
     )
     provisioned = await client.post(
-        f"/api/v1/phone-connections/{created.json()['id']}/provision",
+        f"/api/v1/phone-numbers/{created.json()['id']}/provision",
         headers=headers,
     )
 
     assert provisioned.status_code == 200, provisioned.text
-    assert provisioned.json()["connection"]["status"] == "registering"
+    assert provisioned.json()["phone_number"]["status"] == "registering"
     payload = FakeAsteriskProvisioner.calls[0][1]
     assert payload["mode"] == "registration"
     assert payload["server_uri"] == "sip.provider.test"
@@ -387,7 +387,7 @@ async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
 ):
     headers = {"Authorization": f"Bearer {admin_a_token}"}
     created = await client.post(
-        "/api/v1/phone-connections",
+        "/api/v1/phone-numbers",
         headers=headers,
         json={
             "name": "Disposable SIP",
@@ -400,15 +400,15 @@ async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
             },
         },
     )
-    connection_id = uuid.UUID(created.json()["id"])
+    phone_id = uuid.UUID(created.json()["id"])
+    connection_id = uuid.UUID(created.json()["connection_id"])
     provisioned = await client.post(
-        f"/api/v1/phone-connections/{connection_id}/provision",
+        f"/api/v1/phone-numbers/{phone_id}/provision",
         headers=headers,
     )
-    phone_id = uuid.UUID(provisioned.json()["connection"]["phone_number_id"])
-
+    assert provisioned.status_code == 200, provisioned.text
     deleted = await client.delete(
-        f"/api/v1/phone-connections/{connection_id}", headers=headers
+        f"/api/v1/phone-numbers/{phone_id}", headers=headers
     )
 
     assert deleted.status_code == 204
@@ -417,7 +417,7 @@ async def test_delete_disconnects_before_removing_connection_and_phone_mapping(
     assert await db_session.get(TelephonyConnection, connection_id) is None
     assert await db_session.get(PhoneNumber, phone_id) is None
     missing = await client.get(
-        f"/api/v1/phone-connections/{connection_id}", headers=headers
+        f"/api/v1/phone-numbers/{phone_id}", headers=headers
     )
     assert missing.status_code == 404
 
@@ -487,9 +487,16 @@ async def test_phone_numbers_is_the_unified_public_telephony_api(
     assert await db_session.get(TelephonyConnection, connection_id) is None
 
 
-def test_phone_connections_openapi_operations_are_deprecated():
+@pytest.mark.asyncio
+async def test_phone_connections_routes_are_removed(
+    client: AsyncClient, admin_a_token: str
+):
     from app.main import app
 
     schema = app.openapi()
-    operation = schema["paths"]["/api/v1/phone-connections"]["get"]
-    assert operation["deprecated"] is True
+    assert not any(path.startswith("/api/v1/phone-connections") for path in schema["paths"])
+    response = await client.get(
+        "/api/v1/phone-connections",
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+    assert response.status_code == 404
