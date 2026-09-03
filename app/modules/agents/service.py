@@ -19,11 +19,13 @@ from app.modules.agents.schemas import (
     AgentUpdate,
 )
 from app.core.schemas import PaginatedResponse
+from app.modules.billing.entitlements import EntitlementService
 
 
 class AgentService:
     def __init__(self, db: AsyncSession):
         self.repo = AgentRepository(db)
+        self.entitlements = EntitlementService(db)
 
     def _get_company_id(self, current_user: CurrentUser) -> uuid.UUID:
         if not current_user.company_id:
@@ -92,6 +94,7 @@ class AgentService:
         if not current_user.is_company_admin and not current_user.is_super_admin:
             raise PermissionDeniedError()
         company_id = self._get_company_id(current_user)
+        await self.entitlements.require_resource_capacity(company_id, "agents")
         agent_data = data.model_dump()
         if data.use_realtime:
             self._apply_realtime_configuration(agent_data)

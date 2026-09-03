@@ -52,3 +52,10 @@ class RateLimitError(AppException):
 class IntegrationError(AppException):
     def __init__(self, message: str, details=None):
         super().__init__(status.HTTP_502_BAD_GATEWAY, "INTEGRATION_ERROR", message, details)
+
+
+class EntitlementError(AppException):
+    """A subscription or plan entitlement prevents the requested operation."""
+
+    def __init__(self, code: str, message: str, details=None, status_code: int = 403):
+        super().__init__(status_code, code, message, details)

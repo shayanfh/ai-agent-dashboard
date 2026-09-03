@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.dependencies import CurrentUser
 from app.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.agents.models import Agent
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.billing.models import Subscription
 from app.modules.calls.models import Call, CallDirection, CallSource, CallStatus
 
@@ -138,6 +139,7 @@ class WebTestCallService:
     ) -> WebTestCallSessionResponse:
         self._validate_livekit_settings()
         company_id = self._company_id(current_user)
+        await EntitlementService(self.db).require_minutes_available(company_id, lock=True)
         agent = await self.db.scalar(
             select(Agent).where(Agent.id == agent_id, Agent.company_id == company_id)
         )

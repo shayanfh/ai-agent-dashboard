@@ -11,6 +11,11 @@ from app.modules.onboarding.models import (
 )
 
 
+@pytest.fixture(autouse=True)
+def active_outbound_subscription(active_subscription_a):
+    """Outbound campaign operations require an active company subscription."""
+
+
 async def _connect_phone(db_session, company, phone):
     connection = TelephonyConnection(
         id=uuid.uuid4(),

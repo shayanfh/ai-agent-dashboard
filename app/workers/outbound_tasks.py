@@ -5,6 +5,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, select
 
 from app.core.database import AsyncSessionLocal
+from app.core.exceptions import EntitlementError
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.calls.models import Call, CallDirection, CallStatus
 from app.modules.outbound_campaigns.models import (
     CampaignStatus,
@@ -96,43 +98,19 @@ async def _dispatch_campaign(campaign_id: uuid.UUID) -> None:
         )
         if not slots:
             return
-        from app.modules.billing.models import Plan, Subscription, SubscriptionStatus
-
-        subscription_row = (
-            await db.execute(
-                select(Subscription, Plan)
-                .join(Plan, Plan.id == Subscription.plan_id)
-                .where(Subscription.company_id == campaign.company_id)
+        try:
+            await EntitlementService(db).require_minutes_available(
+                campaign.company_id, lock=True
             )
-        ).one_or_none()
-        if subscription_row:
-            subscription, plan = subscription_row
-            if subscription.status not in {
-                SubscriptionStatus.ACTIVE,
-                SubscriptionStatus.TRIAL,
-            }:
-                campaign.status = CampaignStatus.PAUSED
-                await db.commit()
-                return
-            if plan.monthly_minutes is not None:
-                used_seconds = int(
-                    await db.scalar(
-                        select(func.coalesce(func.sum(Call.duration_seconds), 0)).where(
-                            Call.company_id == campaign.company_id,
-                            Call.started_at >= subscription.current_period_start,
-                            Call.started_at < subscription.current_period_end,
-                        )
-                    )
-                    or 0
-                )
-                if used_seconds >= plan.monthly_minutes * 60:
-                    campaign.status = CampaignStatus.PAUSED
-                    campaign.settings = {
-                        **(campaign.settings or {}),
-                        "pause_reason": "monthly_minutes_exhausted",
-                    }
-                    await db.commit()
-                    return
+        except EntitlementError as exc:
+            campaign.status = CampaignStatus.PAUSED
+            campaign.settings = {
+                **(campaign.settings or {}),
+                "pause_reason": exc.detail["code"].lower(),
+                "pause_details": exc.detail.get("details"),
+            }
+            await db.commit()
+            return
         now = datetime.now(timezone.utc)
         candidates = list(
             await db.scalars(

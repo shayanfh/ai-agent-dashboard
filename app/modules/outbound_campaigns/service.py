@@ -25,6 +25,7 @@ from app.core.exceptions import (
 from app.core.schemas import PaginatedResponse
 from app.core.storage import get_object_storage
 from app.modules.agents.models import Agent, AgentStatus
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.outbound_campaigns.models import (
     CampaignStatus,
     CampaignType,
@@ -68,6 +69,7 @@ TERMINAL = {
 class OutboundCampaignService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        self.entitlements = EntitlementService(db)
 
     @staticmethod
     def _company_id(user: CurrentUser) -> uuid.UUID:
@@ -170,6 +172,7 @@ class OutboundCampaignService:
 
     async def create(self, data: CampaignCreate, user: CurrentUser) -> CampaignResponse:
         company_id = self._company_id(user)
+        await self.entitlements.require_active_subscription(company_id)
         await self._validate_resources(data, company_id)
         concurrency = min(
             data.max_concurrency, settings.OUTBOUND_MAX_CONCURRENCY_PER_COMPANY
@@ -503,6 +506,7 @@ class OutboundCampaignService:
         self, campaign_id: uuid.UUID, data: CampaignScheduleRequest, user: CurrentUser
     ) -> CampaignResponse:
         campaign = await self._get(campaign_id, user)
+        await self.entitlements.require_minutes_available(campaign.company_id, lock=True)
         validation = await self.validate(campaign_id, user)
         if not validation.valid:
             raise ValidationError(
@@ -517,6 +521,7 @@ class OutboundCampaignService:
         self, campaign_id: uuid.UUID, user: CurrentUser
     ) -> CampaignResponse:
         campaign = await self._get(campaign_id, user)
+        await self.entitlements.require_minutes_available(campaign.company_id, lock=True)
         validation = await self.validate(campaign_id, user)
         if not validation.valid:
             raise ValidationError(
@@ -548,6 +553,10 @@ class OutboundCampaignService:
         if campaign.status not in allowed[status]:
             raise ConflictError(
                 f"Cannot change {campaign.status.value} campaign to {status.value}"
+            )
+        if status == CampaignStatus.RUNNING:
+            await self.entitlements.require_minutes_available(
+                campaign.company_id, lock=True
             )
         campaign.status = status
         if status == CampaignStatus.CANCELLED:

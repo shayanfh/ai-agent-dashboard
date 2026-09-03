@@ -881,6 +881,45 @@ The pending plan becomes active only after the invoice has been paid in full.
 Free plans switch immediately. Cancellation is scheduled for the end of the
 current period and can be resumed before then.
 
+### Subscription entitlement enforcement
+
+Paid features are checked server-side; dashboard clients must not rely only on
+disabled buttons. A subscription must be `active` or `trial`, the current time
+must be inside its billing period, and its plan must still be active. A scheduled
+cancellation continues to work until the end of the paid period.
+
+| Operation | Enforcement |
+| --- | --- |
+| Create an agent | Active subscription + `plan.max_agents` |
+| Create an integration | Active subscription + `plan.max_integrations` |
+| Create/run/schedule/resume an outbound campaign | Active subscription; execution also requires remaining monthly minutes |
+| Start a browser test call | Active subscription + remaining monthly minutes |
+| Resolve an inbound or outbound AI call | Active subscription + remaining monthly minutes |
+
+Agent and integration checks lock the company's unique subscription row until
+the create transaction commits. This prevents simultaneous requests from both
+using the final available slot on PostgreSQL. A `null` plan limit means
+unlimited. Browser test, inbound, and outbound durations all consume the same
+`monthly_minutes` allowance shown by `GET /api/v1/billing/usage`.
+
+Entitlement failures use the standard structured error response:
+
+```json
+{
+  "error": {
+    "code": "PLAN_LIMIT_REACHED",
+    "message": "The plan limit for agents has been reached.",
+    "details": {"resource": "agents", "used": 1, "limit": 1}
+  }
+}
+```
+
+Frontend clients should handle `SUBSCRIPTION_REQUIRED`,
+`SUBSCRIPTION_INACTIVE`, `SUBSCRIPTION_PERIOD_INACTIVE`, `PLAN_UNAVAILABLE`,
+`PLAN_LIMIT_REACHED`, and `MONTHLY_MINUTES_EXHAUSTED`. If a worker encounters
+one of these conditions, it pauses the outbound campaign and stores the code and
+details in `settings.pause_reason` and `settings.pause_details`.
+
 Super Admin endpoints:
 
 ```http

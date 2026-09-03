@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
 import pytest
@@ -53,7 +54,7 @@ import app.modules.requests.models  # noqa: F401
 import app.modules.knowledge_base.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.onboarding.models  # noqa: F401
-from app.modules.billing.models import Plan  # noqa: E402
+from app.modules.billing.models import Plan, Subscription, SubscriptionStatus  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +237,42 @@ async def company_b(db_session: AsyncSession) -> Company:
     db_session.add(company)
     await db_session.flush()
     return company
+
+
+@pytest_asyncio.fixture
+async def active_subscription_a(
+    db_session: AsyncSession, company_a: Company
+) -> Subscription:
+    plan = await db_session.get(Plan, uuid.UUID("00000000-0000-0000-0000-000000000100"))
+    now = datetime.now(timezone.utc)
+    subscription = Subscription(
+        company_id=company_a.id,
+        plan_id=plan.id,
+        status=SubscriptionStatus.ACTIVE,
+        current_period_start=now - timedelta(days=1),
+        current_period_end=now + timedelta(days=29),
+    )
+    db_session.add(subscription)
+    await db_session.flush()
+    return subscription
+
+
+@pytest_asyncio.fixture
+async def active_subscription_b(
+    db_session: AsyncSession, company_b: Company
+) -> Subscription:
+    plan = await db_session.get(Plan, uuid.UUID("00000000-0000-0000-0000-000000000100"))
+    now = datetime.now(timezone.utc)
+    subscription = Subscription(
+        company_id=company_b.id,
+        plan_id=plan.id,
+        status=SubscriptionStatus.ACTIVE,
+        current_period_start=now - timedelta(days=1),
+        current_period_end=now + timedelta(days=29),
+    )
+    db_session.add(subscription)
+    await db_session.flush()
+    return subscription
 
 
 # ---------------------------------------------------------------------------

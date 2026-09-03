@@ -207,6 +207,7 @@ async def test_first_inbound_call_activates_phone_connection(
     db_session: AsyncSession,
     agent_a: Agent,
     admin_a_token: str,
+    active_subscription_a,
 ):
     headers = {"Authorization": f"Bearer {admin_a_token}"}
     created = await client.post(

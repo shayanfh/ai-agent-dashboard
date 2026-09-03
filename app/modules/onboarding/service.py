@@ -8,6 +8,7 @@ from app.core.dependencies import CurrentUser
 from app.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from app.modules.agents.models import Agent, AgentStatus
 from app.modules.agents.schemas import AGENT_TEMPLATES
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.companies.models import Company
 from app.modules.knowledge_base.models import KnowledgeBaseItem, KnowledgeDocument
 from app.modules.onboarding.models import (
@@ -124,6 +125,9 @@ class OnboardingService:
                 select(Agent).where(Agent.company_id == company.id).limit(1)
             )
             if not existing_agent:
+                await EntitlementService(self.db).require_resource_capacity(
+                    company.id, "agents"
+                )
                 template = next(
                     item
                     for item in AGENT_TEMPLATES

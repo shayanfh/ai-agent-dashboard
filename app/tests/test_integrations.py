@@ -10,7 +10,9 @@ from app.core.security import encrypt_credential
 
 
 @pytest.mark.asyncio
-async def test_create_integration(client: AsyncClient, admin_a_token: str):
+async def test_create_integration(
+    client: AsyncClient, admin_a_token: str, active_subscription_a
+):
     response = await client.post(
         "/api/v1/integrations",
         json={

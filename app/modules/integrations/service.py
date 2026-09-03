@@ -13,6 +13,7 @@ from app.modules.integrations.schemas import (
     IntegrationLogResponse, TestConnectionResponse,
 )
 from app.core.schemas import PaginatedResponse
+from app.modules.billing.entitlements import EntitlementService
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class IntegrationService:
     def __init__(self, db: AsyncSession):
         self.repo = IntegrationRepository(db)
         self.db = db
+        self.entitlements = EntitlementService(db)
 
     def _get_company_id(self, current_user: CurrentUser) -> uuid.UUID:
         if not current_user.company_id:
@@ -52,6 +54,7 @@ class IntegrationService:
     async def create_integration(self, data: IntegrationCreate, current_user: CurrentUser) -> IntegrationResponse:
         self._require_admin(current_user)
         company_id = self._get_company_id(current_user)
+        await self.entitlements.require_resource_capacity(company_id, "integrations")
         create_data = {
             "company_id": company_id,
             "integration_type": data.integration_type,

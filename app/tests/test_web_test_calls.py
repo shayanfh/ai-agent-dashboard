@@ -33,6 +33,7 @@ async def test_company_creates_browser_test_call_session(
     agent_a: Agent,
     admin_a_token: str,
     configured_livekit,
+    active_subscription_a,
 ):
     response = await client.post(
         f"/api/v1/agents/{agent_a.id}/test-calls",
@@ -60,6 +61,7 @@ async def test_company_cannot_test_another_tenants_agent(
     agent_a: Agent,
     admin_b_token: str,
     configured_livekit,
+    active_subscription_b,
 ):
     response = await client.post(
         f"/api/v1/agents/{agent_a.id}/test-calls",
@@ -130,6 +132,7 @@ async def test_voice_agent_resolves_web_test_context_and_transfer_is_blocked(
     db_session: AsyncSession,
     company_a: Company,
     agent_a: Agent,
+    active_subscription_a,
 ):
     call = Call(
         company_id=company_a.id,

@@ -138,6 +138,7 @@ async def test_company_admin_can_create_agent(
     client: AsyncClient,
     admin_a_token: str,
     company_a,
+    active_subscription_a,
 ):
     """Company Admin must be able to create agents in their company."""
     response = await client.post(

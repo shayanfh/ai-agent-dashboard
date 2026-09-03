@@ -25,6 +25,7 @@ from app.core.dependencies import verify_internal_api_key
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.storage import ObjectStorage, get_object_storage
 from app.modules.agents.models import Agent
+from app.modules.billing.entitlements import EntitlementService
 from app.modules.companies.models import Company
 from app.modules.calls.models import Call, CallSource, CallStatus
 from app.modules.calls.schemas import (
@@ -142,6 +143,7 @@ async def resolve_agent(
         raise NotFoundError(f"No active phone number found: {phone_number}")
     if not pn.agent_id:
         raise NotFoundError("Phone number has no agent assigned")
+    await EntitlementService(db).require_minutes_available(pn.company_id)
     agent_result = await db.execute(select(Agent).where(Agent.id == pn.agent_id))
     agent = agent_result.scalar_one_or_none()
     if not agent:
@@ -190,6 +192,7 @@ async def resolve_agent_by_id(
     )
     if not call_context:
         raise NotFoundError("Call context not found")
+    await EntitlementService(db).require_minutes_available(company_id)
     agent = await db.scalar(
         select(Agent).where(Agent.id == agent_id, Agent.company_id == company_id)
     )
@@ -343,6 +346,7 @@ async def create_internal_call(
     pn = result.scalar_one_or_none()
     if not pn:
         raise NotFoundError("Phone number not found")
+    await EntitlementService(db).require_minutes_available(pn.company_id, lock=True)
     call = Call(
         company_id=pn.company_id,
         agent_id=pn.agent_id,

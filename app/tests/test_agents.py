@@ -25,6 +25,7 @@ async def test_create_agent_minimal(
     client: AsyncClient,
     admin_a_token: str,
     company_a,
+    active_subscription_a,
 ):
     """Minimal agent creation with only required fields."""
     response = await client.post(
@@ -45,6 +46,7 @@ async def test_create_agent_full(
     client: AsyncClient,
     admin_a_token: str,
     company_a,
+    active_subscription_a,
 ):
     """Full agent creation with all optional fields."""
     response = await client.post(
@@ -73,6 +75,7 @@ async def test_create_agent_full(
 async def test_realtime_agent_uses_fixed_models_and_selected_elevenlabs_voice(
     client: AsyncClient,
     admin_a_token: str,
+    active_subscription_a,
 ):
     response = await client.post(
         "/api/v1/agents",
@@ -281,6 +284,7 @@ async def test_delete_agent(
     client: AsyncClient,
     admin_a_token: str,
     company_a,
+    active_subscription_a,
 ):
     """DELETE /agents/{id} must respond 204 and the agent must become 404."""
     # Create a disposable agent

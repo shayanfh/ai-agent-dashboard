@@ -108,14 +108,14 @@ async def test_voice_preview_returns_generated_mp3(client, monkeypatch):
     response = await client.post(
         "/api/v1/public/voice-preview",
         headers=_headers(),
-        json={"company_name": "  Acme   Pizza  ", "voice": "nova"},
+        json={"company_name": "  Acme   Pizza  ", "voice": "coral"},
     )
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "audio/mpeg"
     assert response.headers["cache-control"] == "private, no-store"
     assert response.content == b"ID3-demo-audio"
-    assert captured == {"company_name": "Acme Pizza", "voice": "nova"}
+    assert captured == {"company_name": "Acme Pizza", "voice": "coral"}
 
 
 async def test_voice_preview_rejects_unknown_voice(client):
@@ -137,7 +137,7 @@ async def test_voice_preview_service_sends_fixed_greeting(monkeypatch):
         assert json.loads(request.content) == {
             "model": "tts-1",
             "input": GREETING_TEMPLATE.format("Acme Pizza"),
-            "voice": "cedar",
+            "voice": "ballad",
             "response_format": "mp3",
         }
         return httpx.Response(200, content=b"ID3-openai-audio")
@@ -147,7 +147,7 @@ async def test_voice_preview_service_sends_fixed_greeting(monkeypatch):
         base_url="https://api.openai.com",
     ) as http_client:
         audio = await VoicePreviewService(http_client).generate(
-            VoicePreviewRequest(company_name="Acme Pizza", voice="cedar")
+            VoicePreviewRequest(company_name="Acme Pizza", voice="ballad")
         )
 
     assert audio == b"ID3-openai-audio"
