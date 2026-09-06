@@ -18,24 +18,13 @@ def voice_settings() -> Settings:
 
 
 @pytest.mark.asyncio
-async def test_voice_catalog_merges_all_my_voice_and_library_pages_and_caches():
+async def test_voice_catalog_pages_and_searches_at_elevenlabs_and_caches():
     requests: list[httpx.Request] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         assert request.headers["xi-api-key"] == "elevenlabs-secret"
         if request.url.path == "/v2/voices":
-            token = request.url.params.get("next_page_token")
-            if token is None:
-                return httpx.Response(
-                    200,
-                    json={
-                        "voices": [{"voice_id": "mine-2", "name": "Zulu"}],
-                        "has_more": True,
-                        "next_page_token": "mine-page-2",
-                    },
-                )
-            assert token == "mine-page-2"
             return httpx.Response(
                 200,
                 json={
@@ -45,24 +34,10 @@ async def test_voice_catalog_merges_all_my_voice_and_library_pages_and_caches():
             )
 
         assert request.url.path == "/v1/shared-voices"
-        page = int(request.url.params["page"])
-        assert request.url.params["page_size"] == "100"
-        if page == 0:
-            return httpx.Response(
-                200,
-                json={
-                    "voices": [
-                        {
-                            "public_owner_id": "owner-1",
-                            "voice_id": "shared-1",
-                            "name": "Public Alpha",
-                            "gender": "female",
-                        }
-                    ],
-                    "has_more": True,
-                },
-            )
-        assert page == 1
+        assert request.url.params["page"] == "1"
+        assert request.url.params["page_size"] == "1"
+        assert request.url.params["search"] == "beta"
+        assert request.url.params["sort"] == "trending"
         return httpx.Response(
             200,
             json={
@@ -74,6 +49,7 @@ async def test_voice_catalog_merges_all_my_voice_and_library_pages_and_caches():
                     }
                 ],
                 "has_more": False,
+                "total_count": 7,
             },
         )
 
@@ -81,33 +57,21 @@ async def test_voice_catalog_merges_all_my_voice_and_library_pages_and_caches():
         transport=httpx.MockTransport(handler), base_url="https://elevenlabs.test"
     ) as client:
         catalog = ElevenLabsVoiceCatalog(voice_settings(), client=client)
-        first = await catalog.list_voices()
-        second = await catalog.list_voices(page=2, page_size=1)
-        searched = await catalog.list_voices(search="beta")
+        first = await catalog.list_voices(page=2, page_size=1, search=" beta ")
+        second = await catalog.list_voices(page=2, page_size=1, search="BETA")
 
-    assert [voice.voice_id for voice in first.voices] == [
-        "shared-2",
-        "shared-1",
-        "mine-2",
-    ]
-    assert first.total == 3
-    assert first.page == 1
-    assert first.page_size == 20
-    assert first.pages == 1
+    assert [voice.voice_id for voice in first.voices] == ["shared-2"]
+    assert first.total == 7
+    assert first.page == 2
+    assert first.page_size == 1
+    assert first.pages == 7
     assert first.cached is False
     assert second.cached is True
-    assert second.total == 3
-    assert second.pages == 3
-    assert [voice.voice_id for voice in second.voices] == ["shared-1"]
-    assert searched.total == 1
-    assert [voice.voice_id for voice in searched.voices] == ["shared-2"]
-    by_id = {voice.voice_id: voice for voice in first.voices}
-    assert by_id["shared-1"].name == "My Alpha"
-    assert by_id["shared-1"].in_my_voices is True
-    assert by_id["shared-1"].public_owner_id is None
-    assert by_id["shared-2"].in_my_voices is False
-    assert by_id["shared-2"].public_owner_id == "owner-2"
-    assert len(requests) == 4
+    assert first.voices[0].in_my_voices is False
+    assert first.voices[0].public_owner_id == "owner-2"
+    # One My Voices request plus one requested library page; the cached call
+    # performs no ElevenLabs request.
+    assert len(requests) == 2
 
 
 @pytest.mark.asyncio
@@ -151,6 +115,7 @@ async def test_agent_voice_endpoint_requires_admin_and_hides_verified_languages(
     assert voice["public_owner_id"] == "owner-1"
     assert voice["in_my_voices"] is False
     assert "verified_languages" not in voice
+    assert "tts_model" not in response.json()
     list_voices.assert_awaited_once_with(
         page=2,
         page_size=5,
@@ -192,7 +157,7 @@ async def test_selected_library_voice_is_imported_automatically():
         imported = await catalog.ensure_voice_in_my_voices("shared-1")
 
     assert imported is True
-    assert catalog._voices is None
+    assert catalog._page_cache == {}
     assert [request.url.path for request in requests] == [
         "/v2/voices",
         "/v1/shared-voices",

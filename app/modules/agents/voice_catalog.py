@@ -9,13 +9,16 @@ import httpx
 
 from app.core.config import Settings, settings
 from app.core.exceptions import IntegrationError, ValidationError
-from app.modules.agents.schemas import ElevenLabsVoice, ElevenLabsVoiceListResponse
+from app.modules.agents.schemas import (
+    ElevenLabsVoice,
+    ElevenLabsVoiceListResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ElevenLabsVoiceCatalog:
-    """Merge My Voices with the full public library and import selections."""
+    """Page through ElevenLabs Voice Library and import selected voices."""
 
     def __init__(
         self,
@@ -24,15 +27,19 @@ class ElevenLabsVoiceCatalog:
     ) -> None:
         self.settings = app_settings
         self._client = client
-        self._voices: list[ElevenLabsVoice] | None = None
+        self._page_cache: dict[
+            tuple[int, int, str], tuple[float, ElevenLabsVoiceListResponse]
+        ] = {}
+        self._my_voice_ids: set[str] | None = None
+        self._my_voices_expires_at = 0.0
         self._library_index: dict[str, dict[str, Any]] = {}
-        self._expires_at = 0.0
         self._lock = asyncio.Lock()
 
     def invalidate(self) -> None:
-        self._voices = None
-        self._library_index = {}
-        self._expires_at = 0.0
+        # Keep public owner metadata so the next selection does not rediscover it.
+        self._page_cache = {}
+        self._my_voice_ids = None
+        self._my_voices_expires_at = 0.0
 
     def _require_configuration(self) -> None:
         if not self.settings.ELEVENLABS_API_KEY:
@@ -56,103 +63,88 @@ class ElevenLabsVoiceCatalog:
         search: str | None = None,
         force_refresh: bool = False,
     ) -> ElevenLabsVoiceListResponse:
+        """Return one provider-side page instead of downloading the full library."""
+        self._require_configuration()
+        normalized_search = (search or "").strip()
+        cache_key = (page, page_size, normalized_search.casefold())
         now = time.monotonic()
-        if not force_refresh and self._voices is not None and now < self._expires_at:
-            return self._page(
-                self._voices,
-                page=page,
-                page_size=page_size,
-                search=search,
-                cached=True,
-            )
+        cached = self._page_cache.get(cache_key)
+        if not force_refresh and cached is not None and now < cached[0]:
+            return cached[1].model_copy(update={"cached": True})
 
         async with self._lock:
             now = time.monotonic()
-            if not force_refresh and self._voices is not None and now < self._expires_at:
-                return self._page(
-                    self._voices,
+            cached = self._page_cache.get(cache_key)
+            if not force_refresh and cached is not None and now < cached[0]:
+                return cached[1].model_copy(update={"cached": True})
+
+            owns_client = self._client is None
+            client = self._client or self._new_client()
+            try:
+                library_task = self._fetch_public_library_page(
+                    client,
                     page=page,
                     page_size=page_size,
-                    search=search,
-                    cached=True,
+                    search=normalized_search or None,
                 )
-            my_voices, library = await self._fetch_catalogs()
-            self._library_index = {
-                item["voice_id"]: item for item in library if item.get("voice_id")
-            }
-            merged = {
-                voice.voice_id: voice
-                for item in library
-                if (voice := self._public_voice(item)).voice_id
-            }
-            # A My Voices entry wins over its public-library copy.
-            merged.update({voice.voice_id: voice for voice in my_voices})
-            voices = sorted(merged.values(), key=lambda voice: voice.name.casefold())
-            self._voices = voices
-            self._expires_at = now + self.settings.ELEVENLABS_VOICE_CACHE_SECONDS
-            return self._page(
-                voices,
+                my_ids_task = self._get_my_voice_ids(
+                    client, force_refresh=force_refresh
+                )
+                (items, total), my_voice_ids = await asyncio.gather(
+                    library_task, my_ids_task
+                )
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "ElevenLabs voice catalog request failed: %s", type(exc).__name__
+                )
+                raise IntegrationError(
+                    "Could not load the ElevenLabs voice catalog"
+                ) from exc
+            finally:
+                if owns_client:
+                    await client.aclose()
+
+            for item in items:
+                voice_id = item.get("voice_id")
+                if voice_id:
+                    self._library_index[str(voice_id)] = item
+
+            voices: list[ElevenLabsVoice] = []
+            for item in items:
+                voice = self._public_voice(item)
+                voice.in_my_voices = voice.voice_id in my_voice_ids
+                voices.append(voice)
+
+            result = ElevenLabsVoiceListResponse(
+                voices=voices,
+                total=total,
                 page=page,
                 page_size=page_size,
-                search=search,
+                pages=math.ceil(total / page_size) if total else 0,
                 cached=False,
             )
+            self._page_cache[cache_key] = (
+                now + self.settings.ELEVENLABS_VOICE_CACHE_SECONDS,
+                result,
+            )
+            return result
 
-    @staticmethod
-    def _page(
-        voices: list[ElevenLabsVoice],
-        *,
-        page: int,
-        page_size: int,
-        search: str | None,
-        cached: bool,
-    ) -> ElevenLabsVoiceListResponse:
-        term = (search or "").strip().casefold()
-        if term:
-            voices = [
-                voice
-                for voice in voices
-                if term
-                in " ".join(
-                    [
-                        voice.voice_id,
-                        voice.name,
-                        voice.category or "",
-                        voice.description or "",
-                        *voice.labels.keys(),
-                        *voice.labels.values(),
-                    ]
-                ).casefold()
-            ]
-        total = len(voices)
-        offset = (page - 1) * page_size
-        return ElevenLabsVoiceListResponse(
-            voices=voices[offset : offset + page_size],
-            total=total,
-            page=page,
-            page_size=page_size,
-            pages=math.ceil(total / page_size) if total else 0,
-            cached=cached,
+    async def _get_my_voice_ids(
+        self, client: httpx.AsyncClient, *, force_refresh: bool = False
+    ) -> set[str]:
+        now = time.monotonic()
+        if (
+            not force_refresh
+            and self._my_voice_ids is not None
+            and now < self._my_voices_expires_at
+        ):
+            return self._my_voice_ids
+        voices = await self._fetch_my_voices(client)
+        self._my_voice_ids = {voice.voice_id for voice in voices}
+        self._my_voices_expires_at = (
+            now + self.settings.ELEVENLABS_VOICE_CACHE_SECONDS
         )
-
-    async def _fetch_catalogs(
-        self,
-    ) -> tuple[list[ElevenLabsVoice], list[dict[str, Any]]]:
-        self._require_configuration()
-        owns_client = self._client is None
-        client = self._client or self._new_client()
-        try:
-            return await asyncio.gather(
-                self._fetch_my_voices(client), self._fetch_public_library(client)
-            )
-        except httpx.HTTPError as exc:
-            logger.warning(
-                "ElevenLabs voice catalog request failed: %s", type(exc).__name__
-            )
-            raise IntegrationError("Could not load the ElevenLabs voice catalog") from exc
-        finally:
-            if owns_client:
-                await client.aclose()
+        return self._my_voice_ids
 
     async def _fetch_my_voices(
         self, client: httpx.AsyncClient
@@ -189,32 +181,51 @@ class ElevenLabsVoiceCatalog:
             next_page_token = token
         return list({voice.voice_id: voice for voice in voices}.values())
 
+    async def _fetch_public_library_page(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        page: int,
+        page_size: int,
+        search: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        params: dict[str, str | int] = {
+            "page": page - 1,
+            "page_size": page_size,
+            "sort": "trending",
+        }
+        if search:
+            params["search"] = search
+        response = await client.get(
+            "/v1/shared-voices", headers=self._headers, params=params
+        )
+        response.raise_for_status()
+        body = response.json()
+        items = body.get("voices") or []
+        return items, int(body.get("total_count") or len(items))
+
     async def _fetch_public_library(
         self, client: httpx.AsyncClient
     ) -> list[dict[str, Any]]:
+        """Fallback lookup used only when a voice was not listed by this worker."""
         voices: list[dict[str, Any]] = []
-        page = 0
-        previous_ids: tuple[str, ...] | None = None
+        page = 1
         while True:
             response = await client.get(
                 "/v1/shared-voices",
                 headers=self._headers,
-                params={"page": page, "page_size": 100},
+                params={"page": page - 1, "page_size": 100},
             )
             response.raise_for_status()
             body = response.json()
             current = body.get("voices") or []
-            current_ids = tuple(str(item.get("voice_id")) for item in current)
-            if body.get("has_more") and (
-                not current_ids or current_ids == previous_ids
-            ):
-                raise IntegrationError(
-                    "ElevenLabs returned invalid Voice Library pagination"
-                )
             voices.extend(current)
             if not body.get("has_more"):
                 break
-            previous_ids = current_ids
+            if not current:
+                raise IntegrationError(
+                    "ElevenLabs returned invalid Voice Library pagination"
+                )
             page += 1
         return list(
             {item["voice_id"]: item for item in voices if item.get("voice_id")}.values()
@@ -252,18 +263,22 @@ class ElevenLabsVoiceCatalog:
             owns_client = self._client is None
             client = self._client or self._new_client()
             try:
-                my_voices = await self._fetch_my_voices(client)
-                if any(voice.voice_id == voice_id for voice in my_voices):
+                my_voice_ids = await self._get_my_voice_ids(
+                    client, force_refresh=True
+                )
+                if voice_id in my_voice_ids:
                     return False
 
                 item = self._library_index.get(voice_id)
                 if item is None:
                     library = await self._fetch_public_library(client)
-                    self._library_index = {
-                        candidate["voice_id"]: candidate
-                        for candidate in library
-                        if candidate.get("voice_id")
-                    }
+                    self._library_index.update(
+                        {
+                            str(candidate["voice_id"]): candidate
+                            for candidate in library
+                            if candidate.get("voice_id")
+                        }
+                    )
                     item = self._library_index.get(voice_id)
                 if item is None or not item.get("public_owner_id"):
                     raise ValidationError("Selected ElevenLabs voice was not found")

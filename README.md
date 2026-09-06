@@ -631,15 +631,15 @@ catalog endpoint:
 GET /api/v1/agents/voices?page=1&page_size=20&search=sales
 ```
 
-The Backend reads every page from both ElevenLabs **My Voices** and the public
-Voice Library, merges duplicate `voice_id` values, and returns the complete
-result. It does not expose `verified_languages`. Example response:
+The Backend forwards `page`, `page_size`, and `search` directly to the
+ElevenLabs public Voice Library. It fetches only the requested page (instead of
+downloading the entire library), marks voices that are already in **My Voices**,
+and does not expose `verified_languages`. Example response:
 
 ```json
 {
   "voices": [
     {
-      "public_owner_id": "PUBLIC_OWNER_ID",
       "voice_id": "VOICE_ID",
       "name": "Sales Voice",
       "category": "professional",
@@ -657,9 +657,12 @@ result. It does not expose `verified_languages`. Example response:
 }
 ```
 
-`search` is case-insensitive and matches the voice ID, name, category,
-description, and label keys/values. `total` is the number of matches before
-pagination, and `pages` is calculated from `total` and `page_size`.
+Search and pagination happen at ElevenLabs, so response time does not grow with
+the size of the Voice Library. `total` is the provider's match count and
+`pages` is calculated from `total` and `page_size`. ElevenLabs voices are not
+owned by one synthesis model, so the Library API has no `model_id` filter. The
+Backend fixes Realtime synthesis to `eleven_flash_v2_5` internally, and any
+selected Library voice is synthesized with that model.
 
 Results are cached for `ELEVENLABS_VOICE_CACHE_SECONDS`; use
 `GET /api/v1/agents/voices?force_refresh=true` when an immediate refresh is
