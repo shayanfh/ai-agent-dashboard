@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import time
 from typing import Any
 from urllib.parse import quote
@@ -48,19 +49,32 @@ class ElevenLabsVoiceCatalog:
         return {"xi-api-key": self.settings.ELEVENLABS_API_KEY}
 
     async def list_voices(
-        self, *, force_refresh: bool = False
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        search: str | None = None,
+        force_refresh: bool = False,
     ) -> ElevenLabsVoiceListResponse:
         now = time.monotonic()
         if not force_refresh and self._voices is not None and now < self._expires_at:
-            return ElevenLabsVoiceListResponse(
-                voices=self._voices, total=len(self._voices), cached=True
+            return self._page(
+                self._voices,
+                page=page,
+                page_size=page_size,
+                search=search,
+                cached=True,
             )
 
         async with self._lock:
             now = time.monotonic()
             if not force_refresh and self._voices is not None and now < self._expires_at:
-                return ElevenLabsVoiceListResponse(
-                    voices=self._voices, total=len(self._voices), cached=True
+                return self._page(
+                    self._voices,
+                    page=page,
+                    page_size=page_size,
+                    search=search,
+                    cached=True,
                 )
             my_voices, library = await self._fetch_catalogs()
             self._library_index = {
@@ -76,9 +90,50 @@ class ElevenLabsVoiceCatalog:
             voices = sorted(merged.values(), key=lambda voice: voice.name.casefold())
             self._voices = voices
             self._expires_at = now + self.settings.ELEVENLABS_VOICE_CACHE_SECONDS
-            return ElevenLabsVoiceListResponse(
-                voices=voices, total=len(voices), cached=False
+            return self._page(
+                voices,
+                page=page,
+                page_size=page_size,
+                search=search,
+                cached=False,
             )
+
+    @staticmethod
+    def _page(
+        voices: list[ElevenLabsVoice],
+        *,
+        page: int,
+        page_size: int,
+        search: str | None,
+        cached: bool,
+    ) -> ElevenLabsVoiceListResponse:
+        term = (search or "").strip().casefold()
+        if term:
+            voices = [
+                voice
+                for voice in voices
+                if term
+                in " ".join(
+                    [
+                        voice.voice_id,
+                        voice.name,
+                        voice.category or "",
+                        voice.description or "",
+                        *voice.labels.keys(),
+                        *voice.labels.values(),
+                    ]
+                ).casefold()
+            ]
+        total = len(voices)
+        offset = (page - 1) * page_size
+        return ElevenLabsVoiceListResponse(
+            voices=voices[offset : offset + page_size],
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=math.ceil(total / page_size) if total else 0,
+            cached=cached,
+        )
 
     async def _fetch_catalogs(
         self,

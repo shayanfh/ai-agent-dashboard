@@ -628,7 +628,7 @@ Authenticated Company Admins populate the voice selector from one unified
 catalog endpoint:
 
 ```http
-GET /api/v1/agents/voices
+GET /api/v1/agents/voices?page=1&page_size=20&search=sales
 ```
 
 The Backend reads every page from both ElevenLabs **My Voices** and the public
@@ -650,9 +650,16 @@ result. It does not expose `verified_languages`. Example response:
     }
   ],
   "total": 745,
+  "page": 1,
+  "page_size": 20,
+  "pages": 38,
   "cached": false
 }
 ```
+
+`search` is case-insensitive and matches the voice ID, name, category,
+description, and label keys/values. `total` is the number of matches before
+pagination, and `pages` is calculated from `total` and `page_size`.
 
 Results are cached for `ELEVENLABS_VOICE_CACHE_SECONDS`; use
 `GET /api/v1/agents/voices?force_refresh=true` when an immediate refresh is

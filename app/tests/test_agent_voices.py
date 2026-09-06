@@ -82,7 +82,8 @@ async def test_voice_catalog_merges_all_my_voice_and_library_pages_and_caches():
     ) as client:
         catalog = ElevenLabsVoiceCatalog(voice_settings(), client=client)
         first = await catalog.list_voices()
-        second = await catalog.list_voices()
+        second = await catalog.list_voices(page=2, page_size=1)
+        searched = await catalog.list_voices(search="beta")
 
     assert [voice.voice_id for voice in first.voices] == [
         "shared-2",
@@ -90,8 +91,16 @@ async def test_voice_catalog_merges_all_my_voice_and_library_pages_and_caches():
         "mine-2",
     ]
     assert first.total == 3
+    assert first.page == 1
+    assert first.page_size == 20
+    assert first.pages == 1
     assert first.cached is False
     assert second.cached is True
+    assert second.total == 3
+    assert second.pages == 3
+    assert [voice.voice_id for voice in second.voices] == ["shared-1"]
+    assert searched.total == 1
+    assert [voice.voice_id for voice in searched.voices] == ["shared-2"]
     by_id = {voice.voice_id: voice for voice in first.voices}
     assert by_id["shared-1"].name == "My Alpha"
     assert by_id["shared-1"].in_my_voices is True
@@ -118,6 +127,9 @@ async def test_agent_voice_endpoint_requires_admin_and_hides_verified_languages(
                 }
             ],
             "total": 1,
+            "page": 2,
+            "page_size": 5,
+            "pages": 1,
             "cached": False,
         }
     )
@@ -128,7 +140,7 @@ async def test_agent_voice_endpoint_requires_admin_and_hides_verified_languages(
         headers={"Authorization": f"Bearer {operator_a_token}"},
     )
     response = await client.get(
-        "/api/v1/agents/voices?force_refresh=true",
+        "/api/v1/agents/voices?page=2&page_size=5&search=demo&force_refresh=true",
         headers={"Authorization": f"Bearer {admin_a_token}"},
     )
 
@@ -139,7 +151,12 @@ async def test_agent_voice_endpoint_requires_admin_and_hides_verified_languages(
     assert voice["public_owner_id"] == "owner-1"
     assert voice["in_my_voices"] is False
     assert "verified_languages" not in voice
-    list_voices.assert_awaited_once_with(force_refresh=True)
+    list_voices.assert_awaited_once_with(
+        page=2,
+        page_size=5,
+        search="demo",
+        force_refresh=True,
+    )
 
 
 @pytest.mark.asyncio

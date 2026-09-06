@@ -32,10 +32,18 @@ async def get_templates():
 
 @router.get("/voices", response_model=ElevenLabsVoiceListResponse)
 async def list_elevenlabs_voices(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None, max_length=100),
     force_refresh: bool = Query(False),
     _current_user: CurrentUser = Depends(require_company_admin),
 ):
-    return await voice_catalog.list_voices(force_refresh=force_refresh)
+    return await voice_catalog.list_voices(
+        page=page,
+        page_size=page_size,
+        search=search,
+        force_refresh=force_refresh,
+    )
 
 
 @router.get("/test-calls/usage", response_model=WebTestCallUsageResponse)
