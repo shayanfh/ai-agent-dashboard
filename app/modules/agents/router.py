@@ -35,6 +35,8 @@ async def list_elevenlabs_voices(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(None, max_length=100),
+    language: str | None = Query(None, min_length=2, max_length=20),
+    accent: str | None = Query(None, min_length=2, max_length=50),
     force_refresh: bool = Query(False),
     _current_user: CurrentUser = Depends(require_company_admin),
 ):
@@ -42,6 +44,8 @@ async def list_elevenlabs_voices(
         page=page,
         page_size=page_size,
         search=search,
+        language=language,
+        accent=accent,
         force_refresh=force_refresh,
     )
 

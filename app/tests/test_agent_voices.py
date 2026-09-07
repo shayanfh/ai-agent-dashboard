@@ -120,7 +120,53 @@ async def test_agent_voice_endpoint_requires_admin_and_hides_verified_languages(
         page=2,
         page_size=5,
         search="demo",
+        language=None,
+        accent=None,
         force_refresh=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_voice_search_prioritizes_literal_accent_and_verified_language():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v2/voices":
+            return httpx.Response(200, json={"voices": [], "has_more": False})
+        assert request.url.params["search"] == "oman"
+        assert request.url.params["language"] == "ar"
+        assert request.url.params["accent"] == "omani"
+        return httpx.Response(
+            200,
+            json={
+                "voices": [
+                    {"voice_id": "fuzzy", "name": "Arabian narrator"},
+                    {
+                        "voice_id": "verified",
+                        "name": "Maha",
+                        "verified_languages": [
+                            {"language": "ar", "locale": "ar-OM", "accent": "omani"}
+                        ],
+                    },
+                    {"voice_id": "named", "name": "Oman Guide"},
+                ],
+                "total_count": 3,
+                "has_more": False,
+            },
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://elevenlabs.test"
+    ) as client:
+        result = await ElevenLabsVoiceCatalog(
+            voice_settings(), client=client
+        ).list_voices(search="oman", language="ar", accent="omani")
+
+    assert [voice.voice_id for voice in result.voices] == [
+        "verified",
+        "named",
+        "fuzzy",
+    ]
+    assert all(
+        "verified_languages" not in voice.model_dump() for voice in result.voices
     )
 
 

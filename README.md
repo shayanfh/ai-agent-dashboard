@@ -631,6 +631,13 @@ catalog endpoint:
 GET /api/v1/agents/voices?page=1&page_size=20&search=sales
 ```
 
+Language and accent can be filtered explicitly when a geographic search term
+is ambiguous in ElevenLabs, for example:
+
+```http
+GET /api/v1/agents/voices?page=1&page_size=20&search=oman&language=ar&accent=omani
+```
+
 The Backend forwards `page`, `page_size`, and `search` directly to the
 ElevenLabs public Voice Library. It fetches only the requested page (instead of
 downloading the entire library), marks voices that are already in **My Voices**,
@@ -660,7 +667,11 @@ and does not expose `verified_languages`. Example response:
 Search and pagination happen at ElevenLabs, so response time does not grow with
 the size of the Voice Library. `total` is the provider's match count and
 `pages` is calculated from `total` and `page_size`. ElevenLabs voices are not
-owned by one synthesis model, so the Library API has no `model_id` filter. The
+always indexed under a country name. The Backend therefore prioritizes literal
+matches in name, description, accent, locale, language and internal verified
+language metadata while keeping `verified_languages` out of the API response.
+Use `language` and `accent` for deterministic filtering. Voices are not owned
+by one synthesis model, so the Library API has no `model_id` filter. The
 Backend fixes Realtime synthesis to `eleven_flash_v2_5` internally, and any
 selected Library voice is synthesized with that model.
 

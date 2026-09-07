@@ -28,7 +28,8 @@ class ElevenLabsVoiceCatalog:
         self.settings = app_settings
         self._client = client
         self._page_cache: dict[
-            tuple[int, int, str], tuple[float, ElevenLabsVoiceListResponse]
+            tuple[int, int, str, str, str],
+            tuple[float, ElevenLabsVoiceListResponse],
         ] = {}
         self._my_voice_ids: set[str] | None = None
         self._my_voices_expires_at = 0.0
@@ -61,12 +62,22 @@ class ElevenLabsVoiceCatalog:
         page: int = 1,
         page_size: int = 20,
         search: str | None = None,
+        language: str | None = None,
+        accent: str | None = None,
         force_refresh: bool = False,
     ) -> ElevenLabsVoiceListResponse:
         """Return one provider-side page instead of downloading the full library."""
         self._require_configuration()
         normalized_search = (search or "").strip()
-        cache_key = (page, page_size, normalized_search.casefold())
+        normalized_language = (language or "").strip()
+        normalized_accent = (accent or "").strip()
+        cache_key = (
+            page,
+            page_size,
+            normalized_search.casefold(),
+            normalized_language.casefold(),
+            normalized_accent.casefold(),
+        )
         now = time.monotonic()
         cached = self._page_cache.get(cache_key)
         if not force_refresh and cached is not None and now < cached[0]:
@@ -86,6 +97,8 @@ class ElevenLabsVoiceCatalog:
                     page=page,
                     page_size=page_size,
                     search=normalized_search or None,
+                    language=normalized_language or None,
+                    accent=normalized_accent or None,
                 )
                 my_ids_task = self._get_my_voice_ids(
                     client, force_refresh=force_refresh
@@ -108,6 +121,9 @@ class ElevenLabsVoiceCatalog:
                 voice_id = item.get("voice_id")
                 if voice_id:
                     self._library_index[str(voice_id)] = item
+
+            if normalized_search:
+                items.sort(key=lambda item: self._search_rank(item, normalized_search))
 
             voices: list[ElevenLabsVoice] = []
             for item in items:
@@ -188,6 +204,8 @@ class ElevenLabsVoiceCatalog:
         page: int,
         page_size: int,
         search: str | None = None,
+        language: str | None = None,
+        accent: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         params: dict[str, str | int] = {
             "page": page - 1,
@@ -196,6 +214,10 @@ class ElevenLabsVoiceCatalog:
         }
         if search:
             params["search"] = search
+        if language:
+            params["language"] = language
+        if accent:
+            params["accent"] = accent
         response = await client.get(
             "/v1/shared-voices", headers=self._headers, params=params
         )
@@ -203,6 +225,45 @@ class ElevenLabsVoiceCatalog:
         body = response.json()
         items = body.get("voices") or []
         return items, int(body.get("total_count") or len(items))
+
+    @staticmethod
+    def _search_rank(item: dict[str, Any], search: str) -> int:
+        """Put literal metadata matches before ElevenLabs' fuzzy matches.
+
+        `verified_languages` participates only in ranking and is never included
+        in the public response schema.
+        """
+        term = search.casefold()
+        values = [
+            item.get("voice_id"),
+            item.get("name"),
+            item.get("description"),
+            item.get("category"),
+            item.get("language"),
+            item.get("locale"),
+            item.get("accent"),
+            item.get("gender"),
+            item.get("age"),
+            item.get("use_case"),
+            item.get("descriptive"),
+        ]
+        for verified in item.get("verified_languages") or []:
+            if isinstance(verified, dict):
+                values.extend(
+                    [
+                        verified.get("language"),
+                        verified.get("locale"),
+                        verified.get("accent"),
+                    ]
+                )
+        normalized = [str(value).casefold() for value in values if value is not None]
+        if any(value == term for value in normalized):
+            return 0
+        if any(value.startswith(term) for value in normalized):
+            return 1
+        if any(term in value for value in normalized):
+            return 2
+        return 3
 
     async def _fetch_public_library(
         self, client: httpx.AsyncClient
