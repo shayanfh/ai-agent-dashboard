@@ -65,6 +65,9 @@ class Plan(Base):
     stripe_price_id: Mapped[Optional[str]] = mapped_column(
         String(255), unique=True, nullable=True
     )
+    stripe_product_id: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

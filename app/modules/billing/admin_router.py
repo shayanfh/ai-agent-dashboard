@@ -17,6 +17,7 @@ from app.modules.billing.schemas import (
     PlanResponse,
 )
 from app.modules.billing.service import AdminBillingService
+from app.modules.billing.stripe_gateway import StripeGateway, get_stripe_gateway
 
 router = APIRouter()
 
@@ -26,8 +27,9 @@ async def create_plan(
     data: AdminPlanCreate,
     current_user: CurrentUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
 ):
-    return await AdminBillingService(db).create_plan(data)
+    return await AdminBillingService(db, gateway).create_plan(data)
 
 
 @router.patch("/plans/{plan_id}", response_model=PlanResponse)
@@ -36,8 +38,9 @@ async def update_plan(
     data: AdminPlanUpdate,
     current_user: CurrentUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
 ):
-    return await AdminBillingService(db).update_plan(plan_id, data)
+    return await AdminBillingService(db, gateway).update_plan(plan_id, data)
 
 
 @router.delete("/plans/{plan_id}", status_code=204)
@@ -45,8 +48,9 @@ async def delete_plan(
     plan_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
+    gateway: StripeGateway = Depends(get_stripe_gateway),
 ):
-    await AdminBillingService(db).delete_plan(plan_id)
+    await AdminBillingService(db, gateway).delete_plan(plan_id)
 
 
 @router.get("/invoices", response_model=PaginatedResponse[InvoiceResponse])

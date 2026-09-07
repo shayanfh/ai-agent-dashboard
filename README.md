@@ -1027,8 +1027,19 @@ Subscribe it to `checkout.session.completed`,
 deliveries are safe. Successful renewal invoices and payments are mirrored into
 the local billing history.
 
-Each paid local plan must have a recurring Stripe Price ID. A super admin can
-set it through `POST /api/v1/admin/billing/plans` or `PATCH` the existing plan:
+Paid plans are provisioned in Stripe automatically. When a super admin creates
+a plan with `price_monthly_minor > 0` and omits `stripe_price_id`, the Backend
+creates a Stripe Product plus a monthly recurring Price and stores both IDs.
+Changing the plan name or active state updates the Product. Changing the amount
+or currency creates a replacement Price and archives the previous Price; active
+subscriptions using the old Price are not interrupted.
+
+To provision Stripe resources for an older paid plan that has no Price ID, send
+`PATCH /api/v1/admin/billing/plans/{plan_id}` with an empty JSON object (`{}`).
+Deleting an unused managed plan archives its Price and deactivates its Product.
+
+For backward compatibility, a pre-existing recurring Stripe Price can still be
+attached explicitly through `POST /api/v1/admin/billing/plans` or `PATCH`:
 
 ```json
 {

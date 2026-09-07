@@ -1,3 +1,4 @@
+import logging
 import math
 import uuid
 from datetime import datetime, timezone
@@ -37,9 +38,13 @@ from app.modules.billing.schemas import (
     PlanResponse,
     SubscriptionResponse,
 )
+from app.modules.billing.stripe_gateway import StripeGateway
 from app.modules.calls.models import Call, CallSource
 from app.modules.companies.models import Company
 from app.modules.integrations.models import Integration
+
+
+logger = logging.getLogger(__name__)
 
 
 class BillingService:
@@ -297,8 +302,50 @@ class BillingService:
 
 
 class AdminBillingService(BillingService):
+    def __init__(
+        self, db: AsyncSession, stripe_gateway: StripeGateway | None = None
+    ) -> None:
+        super().__init__(db)
+        self.stripe_gateway = stripe_gateway or StripeGateway()
+
+    async def _create_stripe_product(self, plan: Plan) -> None:
+        product = await self.stripe_gateway.create_product(
+            name=plan.name,
+            plan_id=str(plan.id),
+            plan_slug=plan.slug,
+            active=plan.is_active,
+        )
+        if not product.get("id"):
+            raise ValidationError("Stripe returned an invalid Product")
+        plan.stripe_product_id = str(product["id"])
+
+    async def _create_stripe_price(
+        self, plan: Plan, *, previous_price_id: str | None = None
+    ) -> None:
+        if not plan.stripe_product_id:
+            raise ValidationError("Stripe Product is missing for this plan")
+        price = await self.stripe_gateway.create_recurring_price(
+            product_id=plan.stripe_product_id,
+            unit_amount=plan.price_monthly_minor,
+            currency=plan.currency,
+            plan_id=str(plan.id),
+            plan_slug=plan.slug,
+            previous_price_id=previous_price_id,
+        )
+        if not price.get("id"):
+            raise ValidationError("Stripe returned an invalid recurring Price")
+        plan.stripe_price_id = str(price["id"])
+
     async def create_plan(self, data: AdminPlanCreate) -> PlanResponse:
-        plan = Plan(**data.model_dump())
+        if await self.db.scalar(select(Plan.id).where(Plan.slug == data.slug)):
+            raise ConflictError("Plan slug already exists")
+        if data.price_monthly_minor == 0 and data.stripe_price_id:
+            raise ValidationError("Free plans cannot have a Stripe Price")
+
+        plan = Plan(id=uuid.uuid4(), **data.model_dump())
+        if plan.price_monthly_minor > 0 and not plan.stripe_price_id:
+            await self._create_stripe_product(plan)
+            await self._create_stripe_price(plan)
         self.db.add(plan)
         try:
             await self.db.commit()
@@ -315,9 +362,62 @@ class AdminBillingService(BillingService):
         if not plan:
             raise NotFoundError("Plan not found")
         values = data.model_dump(exclude_unset=True)
+        old_price_id = plan.stripe_price_id
+        old_amount = plan.price_monthly_minor
+        old_currency = plan.currency
+        explicit_price = "stripe_price_id" in values
         for key, value in values.items():
             setattr(plan, key, value)
+
+        if plan.price_monthly_minor == 0:
+            if plan.stripe_price_id and explicit_price:
+                raise ValidationError("Free plans cannot have a Stripe Price")
+            plan.stripe_price_id = None
+            if plan.stripe_product_id:
+                await self.stripe_gateway.update_product(
+                    product_id=plan.stripe_product_id,
+                    name=plan.name,
+                    active=False,
+                )
+        else:
+            product_created = False
+            if not plan.stripe_product_id and not (
+                explicit_price and plan.stripe_price_id
+            ):
+                await self._create_stripe_product(plan)
+                product_created = True
+            elif plan.stripe_product_id and (
+                "name" in values
+                or "is_active" in values
+                or old_amount == 0
+            ):
+                await self.stripe_gateway.update_product(
+                    product_id=plan.stripe_product_id,
+                    name=plan.name,
+                    active=plan.is_active,
+                )
+
+            price_terms_changed = (
+                plan.price_monthly_minor != old_amount
+                or plan.currency != old_currency
+            )
+            if not explicit_price and (
+                not plan.stripe_price_id or price_terms_changed or product_created
+            ):
+                await self._create_stripe_price(
+                    plan, previous_price_id=old_price_id
+                )
+
         await self.db.commit()
+        if old_price_id and old_price_id != plan.stripe_price_id:
+            try:
+                await self.stripe_gateway.archive_price(price_id=old_price_id)
+            except Exception:
+                # The local plan must continue pointing at its newly committed
+                # Price. A later retry can safely archive the old one.
+                logger.exception(
+                    "Could not archive replaced Stripe Price %s", old_price_id
+                )
         return PlanResponse.model_validate(plan)
 
     async def delete_plan(self, plan_id: uuid.UUID) -> None:
@@ -338,12 +438,38 @@ class AdminBillingService(BillingService):
         if subscription_id:
             raise ConflictError("Plan is currently used by a subscription")
 
+        stripe_price_id = plan.stripe_price_id
+        stripe_product_id = plan.stripe_product_id
+        plan_name = plan.name
         await self.db.delete(plan)
         try:
             await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
             raise ConflictError("Plan cannot be deleted because it is in use") from exc
+
+        if stripe_price_id:
+            try:
+                await self.stripe_gateway.archive_price(price_id=stripe_price_id)
+            except Exception:
+                logger.exception(
+                    "Could not archive Stripe Price %s for deleted plan %s",
+                    stripe_price_id,
+                    plan_id,
+                )
+        if stripe_product_id:
+            try:
+                await self.stripe_gateway.update_product(
+                    product_id=stripe_product_id,
+                    name=plan_name,
+                    active=False,
+                )
+            except Exception:
+                logger.exception(
+                    "Could not deactivate Stripe Product %s for deleted plan %s",
+                    stripe_product_id,
+                    plan_id,
+                )
 
     async def create_invoice(self, data: AdminInvoiceCreate) -> InvoiceResponse:
         company = await self.db.get(Company, data.company_id)

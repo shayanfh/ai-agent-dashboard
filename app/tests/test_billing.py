@@ -5,10 +5,35 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.main import app as fastapi_app
 from app.modules.agents.models import Agent
 from app.modules.billing.models import Invoice, InvoiceStatus, Plan, Subscription, SubscriptionStatus
+from app.modules.billing.stripe_gateway import get_stripe_gateway
 from app.modules.calls.models import Call, CallStatus
 from app.modules.companies.models import Company
+
+
+class FakePlanStripeGateway:
+    def __init__(self) -> None:
+        self.product_calls: list[dict] = []
+        self.product_update_calls: list[dict] = []
+        self.price_calls: list[dict] = []
+        self.archived_prices: list[str] = []
+
+    async def create_product(self, **kwargs):
+        self.product_calls.append(kwargs)
+        return {"id": f"prod_{kwargs['plan_slug']}"}
+
+    async def update_product(self, **kwargs):
+        self.product_update_calls.append(kwargs)
+        return {"id": kwargs["product_id"]}
+
+    async def create_recurring_price(self, **kwargs):
+        self.price_calls.append(kwargs)
+        return {"id": f"price_{kwargs['unit_amount']}"}
+
+    async def archive_price(self, *, price_id: str):
+        self.archived_prices.append(price_id)
 
 
 async def create_subscription(
@@ -164,9 +189,12 @@ async def test_company_can_schedule_cancellation_and_resume(
 @pytest.mark.asyncio
 async def test_super_admin_can_create_plan_and_manual_invoice(
     client: AsyncClient,
+    db_session: AsyncSession,
     company_a: Company,
     super_admin_token: str,
 ):
+    gateway = FakePlanStripeGateway()
+    fastapi_app.dependency_overrides[get_stripe_gateway] = lambda: gateway
     headers = {"Authorization": f"Bearer {super_admin_token}"}
     plan = await client.post(
         "/api/v1/admin/billing/plans",
@@ -195,9 +223,29 @@ async def test_super_admin_can_create_plan_and_manual_invoice(
 
     assert plan.status_code == 201, plan.text
     assert plan.json()["currency"] == "USD"
+    stored_plan = await db_session.scalar(select(Plan).where(Plan.slug == "business"))
+    assert stored_plan.stripe_product_id == "prod_business"
+    assert stored_plan.stripe_price_id == "price_9900"
+    assert gateway.product_calls[0]["plan_slug"] == "business"
+    assert gateway.price_calls[0]["currency"] == "USD"
+    assert gateway.price_calls[0]["previous_price_id"] is None
     assert invoice.status_code == 201, invoice.text
     assert invoice.json()["total_minor"] == 5500
     assert invoice.json()["amount_due_minor"] == 5500
+
+    updated = await client.patch(
+        f"/api/v1/admin/billing/plans/{stored_plan.id}",
+        headers=headers,
+        json={"name": "Business Plus", "price_monthly_minor": 12900},
+    )
+
+    assert updated.status_code == 200, updated.text
+    await db_session.refresh(stored_plan)
+    assert stored_plan.stripe_product_id == "prod_business"
+    assert stored_plan.stripe_price_id == "price_12900"
+    assert gateway.product_update_calls[-1]["name"] == "Business Plus"
+    assert gateway.price_calls[-1]["previous_price_id"] == "price_9900"
+    assert gateway.archived_prices == ["price_9900"]
 
 
 @pytest.mark.asyncio
@@ -206,12 +254,17 @@ async def test_super_admin_can_delete_unused_plan(
     db_session: AsyncSession,
     super_admin_token: str,
 ):
+    gateway = FakePlanStripeGateway()
+    fastapi_app.dependency_overrides[get_stripe_gateway] = lambda: gateway
     plan = Plan(
         name="Temporary",
         slug="temporary-delete-test",
         monthly_minutes=100,
         max_agents=1,
         max_integrations=1,
+        price_monthly_minor=1500,
+        stripe_product_id="prod_temporary",
+        stripe_price_id="price_temporary",
     )
     db_session.add(plan)
     await db_session.flush()
@@ -223,6 +276,47 @@ async def test_super_admin_can_delete_unused_plan(
 
     assert response.status_code == 204, response.text
     assert await db_session.get(Plan, plan.id) is None
+    assert gateway.archived_prices == ["price_temporary"]
+    assert gateway.product_update_calls == [
+        {
+            "product_id": "prod_temporary",
+            "name": "Temporary",
+            "active": False,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_updating_legacy_paid_plan_provisions_missing_stripe_resources(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    super_admin_token: str,
+):
+    gateway = FakePlanStripeGateway()
+    fastapi_app.dependency_overrides[get_stripe_gateway] = lambda: gateway
+    plan = Plan(
+        name="Legacy Paid",
+        slug="legacy-paid",
+        monthly_minutes=500,
+        max_agents=5,
+        max_integrations=5,
+        price_monthly_minor=2900,
+        currency="USD",
+    )
+    db_session.add(plan)
+    await db_session.flush()
+
+    response = await client.patch(
+        f"/api/v1/admin/billing/plans/{plan.id}",
+        headers={"Authorization": f"Bearer {super_admin_token}"},
+        json={},
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(plan)
+    assert plan.stripe_product_id == "prod_legacy-paid"
+    assert plan.stripe_price_id == "price_2900"
+    assert gateway.price_calls[0]["previous_price_id"] is None
 
 
 @pytest.mark.asyncio

@@ -48,6 +48,82 @@ class StripeGateway:
         except Exception as exc:
             raise IntegrationError("Stripe customer creation failed") from exc
 
+    async def create_product(
+        self, *, name: str, plan_id: str, plan_slug: str, active: bool
+    ) -> dict:
+        self._require_key()
+        try:
+            product = await asyncio.to_thread(
+                stripe.Product.create,
+                name=name,
+                active=active,
+                metadata={"plan_id": plan_id, "plan_slug": plan_slug},
+                api_key=self.api_key,
+                idempotency_key=f"plan-product:{plan_slug}",
+            )
+            return _as_dict(product)
+        except Exception as exc:
+            raise IntegrationError("Stripe product creation failed") from exc
+
+    async def update_product(
+        self, *, product_id: str, name: str, active: bool
+    ) -> dict:
+        self._require_key()
+        try:
+            product = await asyncio.to_thread(
+                stripe.Product.modify,
+                product_id,
+                name=name,
+                active=active,
+                api_key=self.api_key,
+                idempotency_key=f"plan-product-update:{product_id}:{name}:{active}",
+            )
+            return _as_dict(product)
+        except Exception as exc:
+            raise IntegrationError("Stripe product update failed") from exc
+
+    async def create_recurring_price(
+        self,
+        *,
+        product_id: str,
+        unit_amount: int,
+        currency: str,
+        plan_id: str,
+        plan_slug: str,
+        previous_price_id: str | None,
+    ) -> dict:
+        self._require_key()
+        try:
+            price = await asyncio.to_thread(
+                stripe.Price.create,
+                product=product_id,
+                unit_amount=unit_amount,
+                currency=currency.lower(),
+                recurring={"interval": "month"},
+                metadata={"plan_id": plan_id, "plan_slug": plan_slug},
+                api_key=self.api_key,
+                idempotency_key=(
+                    f"plan-price:{plan_id}:{previous_price_id or 'initial'}:"
+                    f"{currency.lower()}:{unit_amount}"
+                ),
+            )
+            return _as_dict(price)
+        except Exception as exc:
+            raise IntegrationError("Stripe recurring price creation failed") from exc
+
+    async def archive_price(self, *, price_id: str) -> None:
+        self._require_key()
+        try:
+            await asyncio.to_thread(
+                stripe.Price.modify,
+                price_id,
+                active=False,
+                api_key=self.api_key,
+                idempotency_key=f"plan-price-archive:{price_id}",
+            )
+        except Exception as exc:
+            raise IntegrationError("Stripe price archival failed") from exc
+
     async def create_checkout_session(
         self,
         *,
