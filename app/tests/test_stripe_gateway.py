@@ -6,6 +6,27 @@ from app.modules.billing.stripe_gateway import StripeGateway
 
 
 @pytest.mark.asyncio
+async def test_product_response_from_stripe_sdk_v15_is_converted(monkeypatch):
+    class ProductResponse:
+        def to_dict(self):
+            return {"id": "prod_sdk_v15"}
+
+    def create_product(**kwargs):
+        return ProductResponse()
+
+    monkeypatch.setattr(gateway_module.stripe.Product, "create", create_product)
+
+    product = await StripeGateway("sk_test_fake").create_product(
+        name="Starter",
+        plan_id="11111111-1111-1111-1111-111111111111",
+        plan_slug="starter",
+        active=True,
+    )
+
+    assert product == {"id": "prod_sdk_v15"}
+
+
+@pytest.mark.asyncio
 async def test_product_creation_uses_plan_id_for_idempotency(monkeypatch):
     captured = {}
 

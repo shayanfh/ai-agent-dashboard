@@ -20,6 +20,8 @@ class StripeWebhookError(ValueError):
 
 
 def _as_dict(value: Any) -> dict:
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
     if hasattr(value, "to_dict_recursive"):
         return value.to_dict_recursive()
     return dict(value)
