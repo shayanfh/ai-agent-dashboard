@@ -1,10 +1,14 @@
 import asyncio
+import logging
 from typing import Any
 
 import stripe
 
 from app.core.config import settings
 from app.core.exceptions import IntegrationError
+
+
+logger = logging.getLogger(__name__)
 
 
 class StripeConfigurationError(IntegrationError):
@@ -19,6 +23,22 @@ def _as_dict(value: Any) -> dict:
     if hasattr(value, "to_dict_recursive"):
         return value.to_dict_recursive()
     return dict(value)
+
+
+def _stripe_integration_error(message: str, exc: Exception) -> IntegrationError:
+    """Keep credentials private while exposing Stripe's actionable error fields."""
+    logger.exception("%s", message)
+    details = {}
+    provider_message = getattr(exc, "user_message", None)
+    error_code = getattr(exc, "code", None)
+    request_id = getattr(exc, "request_id", None)
+    if provider_message:
+        details["provider_message"] = str(provider_message)
+    if error_code:
+        details["stripe_code"] = str(error_code)
+    if request_id:
+        details["stripe_request_id"] = str(request_id)
+    return IntegrationError(message, details or None)
 
 
 class StripeGateway:
@@ -46,7 +66,9 @@ class StripeGateway:
             )
             return _as_dict(customer)
         except Exception as exc:
-            raise IntegrationError("Stripe customer creation failed") from exc
+            raise _stripe_integration_error(
+                "Stripe customer creation failed", exc
+            ) from exc
 
     async def create_product(
         self, *, name: str, plan_id: str, plan_slug: str, active: bool
@@ -59,11 +81,13 @@ class StripeGateway:
                 active=active,
                 metadata={"plan_id": plan_id, "plan_slug": plan_slug},
                 api_key=self.api_key,
-                idempotency_key=f"plan-product:{plan_slug}",
+                idempotency_key=f"plan-product:{plan_id}",
             )
             return _as_dict(product)
         except Exception as exc:
-            raise IntegrationError("Stripe product creation failed") from exc
+            raise _stripe_integration_error(
+                "Stripe product creation failed", exc
+            ) from exc
 
     async def update_product(
         self, *, product_id: str, name: str, active: bool
@@ -80,7 +104,9 @@ class StripeGateway:
             )
             return _as_dict(product)
         except Exception as exc:
-            raise IntegrationError("Stripe product update failed") from exc
+            raise _stripe_integration_error(
+                "Stripe product update failed", exc
+            ) from exc
 
     async def create_recurring_price(
         self,
@@ -109,7 +135,9 @@ class StripeGateway:
             )
             return _as_dict(price)
         except Exception as exc:
-            raise IntegrationError("Stripe recurring price creation failed") from exc
+            raise _stripe_integration_error(
+                "Stripe recurring price creation failed", exc
+            ) from exc
 
     async def archive_price(self, *, price_id: str) -> None:
         self._require_key()
@@ -122,7 +150,9 @@ class StripeGateway:
                 idempotency_key=f"plan-price-archive:{price_id}",
             )
         except Exception as exc:
-            raise IntegrationError("Stripe price archival failed") from exc
+            raise _stripe_integration_error(
+                "Stripe price archival failed", exc
+            ) from exc
 
     async def create_checkout_session(
         self,
