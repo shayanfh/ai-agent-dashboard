@@ -138,6 +138,7 @@ async def test_voice_search_prioritizes_literal_accent_and_verified_language():
             200,
             json={
                 "voices": [
+                    {"voice_id": "substring", "name": "Professional Woman"},
                     {"voice_id": "fuzzy", "name": "Arabian narrator"},
                     {
                         "voice_id": "verified",
@@ -148,7 +149,7 @@ async def test_voice_search_prioritizes_literal_accent_and_verified_language():
                     },
                     {"voice_id": "named", "name": "Oman Guide"},
                 ],
-                "total_count": 3,
+                "total_count": 4,
                 "has_more": False,
             },
         )
@@ -161,10 +162,11 @@ async def test_voice_search_prioritizes_literal_accent_and_verified_language():
         ).list_voices(search="oman", language="ar", accent="omani")
 
     assert [voice.voice_id for voice in result.voices] == [
-        "verified",
         "named",
-        "fuzzy",
+        "verified",
     ]
+    assert result.total == 2
+    assert result.pages == 1
     assert all(
         "verified_languages" not in voice.model_dump() for voice in result.voices
     )

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import re
 import time
 from typing import Any
 from urllib.parse import quote
@@ -103,7 +104,7 @@ class ElevenLabsVoiceCatalog:
                 my_ids_task = self._get_my_voice_ids(
                     client, force_refresh=force_refresh
                 )
-                (items, total), my_voice_ids = await asyncio.gather(
+                (items, total, has_more), my_voice_ids = await asyncio.gather(
                     library_task, my_ids_task
                 )
             except httpx.HTTPError as exc:
@@ -123,7 +124,19 @@ class ElevenLabsVoiceCatalog:
                     self._library_index[str(voice_id)] = item
 
             if normalized_search:
-                items.sort(key=lambda item: self._search_rank(item, normalized_search))
+                ranked_items = [
+                    (self._search_rank(item, normalized_search), item)
+                    for item in items
+                ]
+                # ElevenLabs search is fuzzy and may return `woman` for `oman`.
+                # Keep only token-prefix matches from actual voice metadata.
+                items = [
+                    item
+                    for rank, item in sorted(ranked_items, key=lambda entry: entry[0])
+                    if rank < 3
+                ]
+                if page == 1 and not has_more:
+                    total = len(items)
 
             voices: list[ElevenLabsVoice] = []
             for item in items:
@@ -206,7 +219,7 @@ class ElevenLabsVoiceCatalog:
         search: str | None = None,
         language: str | None = None,
         accent: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int, bool]:
         params: dict[str, str | int] = {
             "page": page - 1,
             "page_size": page_size,
@@ -224,7 +237,11 @@ class ElevenLabsVoiceCatalog:
         response.raise_for_status()
         body = response.json()
         items = body.get("voices") or []
-        return items, int(body.get("total_count") or len(items))
+        return (
+            items,
+            int(body.get("total_count") or len(items)),
+            bool(body.get("has_more")),
+        )
 
     @staticmethod
     def _search_rank(item: dict[str, Any], search: str) -> int:
@@ -233,7 +250,9 @@ class ElevenLabsVoiceCatalog:
         `verified_languages` participates only in ranking and is never included
         in the public response schema.
         """
-        term = search.casefold()
+        terms = re.findall(r"[^\W_]+", search.casefold(), flags=re.UNICODE)
+        if not terms:
+            return 3
         values = [
             item.get("voice_id"),
             item.get("name"),
@@ -257,12 +276,15 @@ class ElevenLabsVoiceCatalog:
                     ]
                 )
         normalized = [str(value).casefold() for value in values if value is not None]
-        if any(value == term for value in normalized):
+        tokens = [
+            token
+            for value in normalized
+            for token in re.findall(r"[^\W_]+", value, flags=re.UNICODE)
+        ]
+        if all(term in normalized or term in tokens for term in terms):
             return 0
-        if any(value.startswith(term) for value in normalized):
+        if all(any(token.startswith(term) for token in tokens) for term in terms):
             return 1
-        if any(term in value for value in normalized):
-            return 2
         return 3
 
     async def _fetch_public_library(

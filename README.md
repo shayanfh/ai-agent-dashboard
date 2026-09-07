@@ -670,6 +670,9 @@ the size of the Voice Library. `total` is the provider's match count and
 always indexed under a country name. The Backend therefore prioritizes literal
 matches in name, description, accent, locale, language and internal verified
 language metadata while keeping `verified_languages` out of the API response.
+Search terms use token boundaries: `oman` matches `Oman` and `Omani`, but does
+not match an unrelated token such as `woman`. Provider fuzzy results without a
+real metadata match are removed.
 Use `language` and `accent` for deterministic filtering. Voices are not owned
 by one synthesis model, so the Library API has no `model_id` filter. The
 Backend fixes Realtime synthesis to `eleven_flash_v2_5` internally, and any
