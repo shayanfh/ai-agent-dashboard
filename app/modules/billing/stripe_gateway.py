@@ -189,7 +189,9 @@ class StripeGateway:
             )
             return _as_dict(session)
         except Exception as exc:
-            raise IntegrationError("Stripe Checkout session creation failed") from exc
+            raise _stripe_integration_error(
+                "Stripe Checkout session creation failed", exc
+            ) from exc
 
     async def create_portal_session(self, *, customer_id: str, return_url: str) -> dict:
         self._require_key()
