@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.modules.integrations.models import IntegrationType, IntegrationStatus
 
 
@@ -56,4 +56,16 @@ class IntegrationLogResponse(BaseModel):
 class TestConnectionResponse(BaseModel):
     success: bool
     message: str
+    details: Optional[dict] = None
+
+
+class WhatsAppMessageSend(BaseModel):
+    to: str = Field(min_length=7, max_length=100)
+    body: str = Field(min_length=1, max_length=4096)
+
+
+class WhatsAppMessageResponse(BaseModel):
+    success: bool
+    message_id: Optional[str] = None
+    status: Optional[str] = None
     details: Optional[dict] = None

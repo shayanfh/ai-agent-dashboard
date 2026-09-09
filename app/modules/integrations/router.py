@@ -6,6 +6,7 @@ from app.core.dependencies import get_current_user, CurrentUser, require_company
 from app.modules.integrations.schemas import (
     IntegrationCreate, IntegrationUpdate, IntegrationResponse,
     IntegrationLogResponse, TestConnectionResponse,
+    WhatsAppMessageSend, WhatsAppMessageResponse,
 )
 from app.modules.integrations.service import IntegrationService
 from app.core.schemas import PaginatedResponse
@@ -93,6 +94,19 @@ async def disconnect_integration(
 ):
     service = IntegrationService(db)
     return await service.disconnect(integration_id, current_user)
+
+
+@router.post(
+    "/{integration_id}/messages", response_model=WhatsAppMessageResponse
+)
+async def send_whatsapp_message(
+    integration_id: uuid.UUID,
+    data: WhatsAppMessageSend,
+    current_user: CurrentUser = Depends(require_company_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = IntegrationService(db)
+    return await service.send_whatsapp_message(integration_id, data, current_user)
 
 
 @router.get("/{integration_id}/logs", response_model=PaginatedResponse[IntegrationLogResponse])

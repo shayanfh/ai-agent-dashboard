@@ -263,6 +263,61 @@ POST /api/v1/integrations/{id}/test
 Authorization: Bearer <token>
 ```
 
+## UltraMsg WhatsApp Integration
+
+Create an outbound WhatsApp integration with the UltraMsg instance ID and token.
+The token is encrypted at rest and is never returned by the API. The UltraMsg
+API hostname is fixed by the Backend and does not need to be supplied by users.
+
+```http
+POST /api/v1/integrations
+Authorization: Bearer <company-admin-token>
+Content-Type: application/json
+
+{
+  "integration_type": "whatsapp",
+  "name": "Main WhatsApp",
+  "api_key": "<ULTRAMSG_TOKEN>",
+  "configuration": {
+    "instance_id": "instance12345",
+    "send_booking_confirmation": true,
+    "booking_message_template": "Hi {customer_name}, your reservation has been received. Reference: {request_id}."
+  }
+}
+```
+
+Test and connect the integration. Connecting succeeds only when UltraMsg reports
+the instance as `authenticated` or `standby`:
+
+```http
+POST /api/v1/integrations/{integration_id}/test
+POST /api/v1/integrations/{integration_id}/connect
+```
+
+Send an arbitrary message from the customer dashboard:
+
+```http
+POST /api/v1/integrations/{integration_id}/messages
+Authorization: Bearer <company-admin-token>
+Content-Type: application/json
+
+{
+  "to": "+96890000001",
+  "body": "Your booking has been confirmed."
+}
+```
+
+When a new `car_booking` or `table_reservation` request is created, the Backend
+queues a confirmation automatically on the `integrations` Celery queue. Supported
+template placeholders are `customer_name`, `customer_phone`, `request_type`,
+`request_id`, plus fields stored in `request_data`, such as `vehicle_type` or
+`pickup_date`. Set `send_booking_confirmation` to `false` to disable automatic
+messages. Delivery attempts and provider responses are available through:
+
+```http
+GET /api/v1/integrations/{integration_id}/logs
+```
+
 ## Self-service phone numbers
 
 The dashboard and public API expose one `Phone Numbers` resource. Internally, provider credentials

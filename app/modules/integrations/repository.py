@@ -39,6 +39,21 @@ class IntegrationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_connected_whatsapp(self, company_id: uuid.UUID) -> Optional[Integration]:
+        from app.modules.integrations.models import IntegrationType
+
+        result = await self.db.execute(
+            select(Integration)
+            .where(
+                Integration.company_id == company_id,
+                Integration.integration_type == IntegrationType.WHATSAPP,
+                Integration.status == IntegrationStatus.CONNECTED,
+            )
+            .order_by(Integration.created_at.asc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
     async def create(self, data: dict) -> Integration:
         integration = Integration(**data)
         self.db.add(integration)

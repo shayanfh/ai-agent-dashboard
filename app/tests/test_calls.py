@@ -2,6 +2,7 @@ import io
 import uuid
 import wave
 from datetime import datetime, timezone
+from unittest import mock
 
 import pytest
 from httpx import AsyncClient
@@ -161,7 +162,17 @@ async def test_complete_call_booking_creates_request(
     call_a: Call,
     admin_a_token: str,
     db_session: AsyncSession,
+    monkeypatch,
 ):
+    from app.workers.integration_tasks import (
+        send_booking_confirmation,
+        sync_request_to_erpnext,
+    )
+
+    erpnext_delay = mock.Mock()
+    whatsapp_delay = mock.Mock()
+    monkeypatch.setattr(sync_request_to_erpnext, "delay", erpnext_delay)
+    monkeypatch.setattr(send_booking_confirmation, "delay", whatsapp_delay)
     request_payload = {
         "summary": "Customer requested an SUV from Muscat Airport.",
         "outcome": "booking_created",
@@ -202,6 +213,8 @@ async def test_complete_call_booking_creates_request(
         select(func.count()).select_from(Request).where(Request.call_id == call_a.id)
     )
     assert request_count == 1
+    erpnext_delay.assert_called_once()
+    whatsapp_delay.assert_called_once()
 
 
 @pytest.mark.asyncio

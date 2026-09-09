@@ -2,11 +2,19 @@ import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.integrations.models import Integration, IntegrationType, IntegrationStatus
+from app.modules.integrations.models import (
+    Integration,
+    IntegrationLog,
+    IntegrationType,
+    IntegrationStatus,
+)
 from app.modules.companies.models import Company
 from app.core.security import encrypt_credential
+from app.modules.integrations.providers.ultramsg.service import UltraMsgService
+from app.modules.requests.models import Request, RequestType
 
 
 @pytest.mark.asyncio
@@ -219,3 +227,146 @@ async def test_company_b_cannot_access_company_a_integration(
         headers={"Authorization": f"Bearer {admin_b_token}"},
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_and_connect_ultramsg_integration(
+    client: AsyncClient,
+    admin_a_token: str,
+    active_subscription_a,
+):
+    created = await client.post(
+        "/api/v1/integrations",
+        json={
+            "integration_type": "whatsapp",
+            "name": "Main WhatsApp",
+            "api_key": "ultramsg-token",
+            "configuration": {
+                "instance_id": "instance12345",
+                "booking_message_template": "Hi {customer_name}, booking {request_id} received.",
+            },
+        },
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["configuration"]["provider"] == "ultramsg"
+    assert created.json()["configuration"]["send_booking_confirmation"] is True
+
+    updated = await client.patch(
+        f"/api/v1/integrations/{created.json()['id']}",
+        json={
+            "configuration": {
+                "booking_message_template": "Hello {customer_name}, we received it."
+            }
+        },
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["configuration"]["instance_id"] == "instance12345"
+
+    bypass = await client.patch(
+        f"/api/v1/integrations/{created.json()['id']}",
+        json={"status": "connected"},
+        headers={"Authorization": f"Bearer {admin_a_token}"},
+    )
+    assert bypass.status_code == 422
+
+    with patch(
+        "app.modules.integrations.providers.ultramsg.client.UltraMsgClient.test_connection",
+        new_callable=AsyncMock,
+        return_value={"success": True, "status": "authenticated"},
+    ):
+        connected = await client.post(
+            f"/api/v1/integrations/{created.json()['id']}/connect",
+            headers={"Authorization": f"Bearer {admin_a_token}"},
+        )
+
+    assert connected.status_code == 200, connected.text
+    assert connected.json()["status"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_company_admin_can_send_custom_ultramsg_message(
+    client: AsyncClient,
+    admin_a_token: str,
+    db_session: AsyncSession,
+    company_a: Company,
+):
+    integration = Integration(
+        company_id=company_a.id,
+        integration_type=IntegrationType.WHATSAPP,
+        name="Main WhatsApp",
+        api_key_encrypted=encrypt_credential("ultramsg-token"),
+        configuration={"provider": "ultramsg", "instance_id": "instance12345"},
+        status=IntegrationStatus.CONNECTED,
+    )
+    db_session.add(integration)
+    await db_session.flush()
+
+    with patch(
+        "app.modules.integrations.providers.ultramsg.client.UltraMsgClient.send_text",
+        new_callable=AsyncMock,
+        return_value={"sent": "true", "id": "msg_123"},
+    ) as send_text:
+        response = await client.post(
+            f"/api/v1/integrations/{integration.id}/messages",
+            json={"to": "+96890000001", "body": "Your booking is confirmed."},
+            headers={"Authorization": f"Bearer {admin_a_token}"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["message_id"] == "msg_123"
+    send_text.assert_awaited_once_with(
+        "+96890000001", "Your booking is confirmed."
+    )
+    log = await db_session.scalar(
+        select(IntegrationLog).where(IntegrationLog.integration_id == integration.id)
+    )
+    assert log.event_type == "send_message"
+    assert log.status == "success"
+
+
+@pytest.mark.asyncio
+async def test_booking_confirmation_renders_configured_template(
+    db_session: AsyncSession,
+    company_a: Company,
+):
+    integration = Integration(
+        company_id=company_a.id,
+        integration_type=IntegrationType.WHATSAPP,
+        name="Booking WhatsApp",
+        api_key_encrypted=encrypt_credential("ultramsg-token"),
+        configuration={
+            "provider": "ultramsg",
+            "instance_id": "instance12345",
+            "booking_message_template": (
+                "Hi {customer_name}, your {vehicle_type} booking is received. "
+                "Reference: {request_id}."
+            ),
+        },
+        status=IntegrationStatus.CONNECTED,
+    )
+    request = Request(
+        company_id=company_a.id,
+        customer_name="Ahmed",
+        customer_phone="+96890000001",
+        request_type=RequestType.CAR_BOOKING,
+        request_data={"vehicle_type": "SUV"},
+    )
+    db_session.add_all([integration, request])
+    await db_session.flush()
+
+    with patch(
+        "app.modules.integrations.providers.ultramsg.client.UltraMsgClient.send_text",
+        new_callable=AsyncMock,
+        return_value={"sent": "true", "id": "msg_booking"},
+    ) as send_text:
+        await UltraMsgService(db_session).send_booking_confirmation(
+            integration, request
+        )
+
+    sent_to, body = send_text.await_args.args
+    assert sent_to == "+96890000001"
+    assert "Hi Ahmed, your SUV booking is received." in body
+    assert str(request.id) in body

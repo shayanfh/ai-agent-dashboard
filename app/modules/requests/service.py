@@ -1,5 +1,6 @@
 import uuid
 import math
+import logging
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import select
@@ -10,6 +11,9 @@ from app.modules.requests.models import RequestStatus, RequestType
 from app.modules.requests.repository import RequestRepository
 from app.modules.requests.schemas import RequestCreate, RequestUpdate, RequestResponse
 from app.core.schemas import PaginatedResponse
+
+
+logger = logging.getLogger(__name__)
 
 
 class RequestService:
@@ -79,6 +83,16 @@ class RequestService:
         req_data = data.model_dump()
         req_data["company_id"] = company_id
         req = await self.repo.create(req_data)
+        if req.request_type in {
+            RequestType.CAR_BOOKING,
+            RequestType.TABLE_RESERVATION,
+        }:
+            try:
+                from app.workers.integration_tasks import send_booking_confirmation
+
+                send_booking_confirmation.delay(str(req.id), str(company_id))
+            except Exception as exc:
+                logger.warning("Could not queue WhatsApp confirmation: %s", exc)
         return RequestResponse.model_validate(req)
 
     async def update_request(

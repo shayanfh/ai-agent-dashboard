@@ -161,19 +161,32 @@ class CallService:
         }
         call = await self.repo.update(call, update_data)
         created_request = None
+        request_was_created = False
 
         if data.outcome in REQUEST_OUTCOMES or (
             data.extracted_data and data.extracted_data.get("request_type")
         ):
-            created_request = await self._create_request_from_call(call, data, company_id)
+            created_request, request_was_created = await self._create_request_from_call(
+                call, data, company_id
+            )
 
         # Queue ERPNext sync if integration exists
-        if created_request:
+        if created_request and request_was_created:
             try:
                 from app.workers.integration_tasks import sync_request_to_erpnext
                 sync_request_to_erpnext.delay(str(created_request.id), str(company_id))
             except Exception as e:
                 logger.warning(f"Could not queue ERPNext sync: {e}")
+
+            if data.outcome == CallOutcome.BOOKING_CREATED:
+                try:
+                    from app.workers.integration_tasks import send_booking_confirmation
+
+                    send_booking_confirmation.delay(
+                        str(created_request.id), str(company_id)
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not queue WhatsApp confirmation: {e}")
 
         return {
             "call": CallResponse.model_validate(call),
@@ -191,7 +204,7 @@ class CallService:
         )
         existing_request = existing_result.scalars().first()
         if existing_request:
-            return existing_request
+            return existing_request, False
 
         extracted = data.extracted_data or {}
         raw_type = extracted.get("request_type", "general_request")
@@ -219,4 +232,4 @@ class CallService:
         await self.db.commit()
         await self.db.refresh(req)
         logger.info(f"Created request {req.id} from call {call.id}")
-        return req
+        return req, True
