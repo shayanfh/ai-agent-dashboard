@@ -14,7 +14,21 @@ from app.modules.integrations.models import (
 from app.modules.companies.models import Company
 from app.core.security import encrypt_credential
 from app.modules.integrations.providers.ultramsg.service import UltraMsgService
+from app.modules.integrations.providers.ultramsg.client import UltraMsgClient
 from app.modules.requests.models import Request, RequestType
+
+
+def test_ultramsg_nested_authenticated_status_is_ready():
+    payload = {
+        "status": {
+            "accountStatus": {
+                "status": "authenticated",
+                "substatus": "connected",
+            }
+        }
+    }
+
+    assert UltraMsgClient._account_status(payload) == "authenticated"
 
 
 @pytest.mark.asyncio

@@ -17,18 +17,18 @@ class UltraMsgClient:
 
     @staticmethod
     def _account_status(payload: dict[str, Any]) -> str | None:
-        status = payload.get("status")
-        if isinstance(status, str):
-            return status.lower()
-        if isinstance(status, dict):
-            value = (
-                status.get("accountStatus")
-                or status.get("account_status")
-                or status.get("status")
-            )
-            return str(value).lower() if value else None
-        value = payload.get("accountStatus") or payload.get("account_status")
-        return str(value).lower() if value else None
+        def find_status(value: Any) -> str | None:
+            if isinstance(value, str):
+                return value.lower()
+            if not isinstance(value, dict):
+                return None
+            for key in ("accountStatus", "account_status", "status"):
+                resolved = find_status(value.get(key))
+                if resolved:
+                    return resolved
+            return None
+
+        return find_status(payload)
 
     async def test_connection(self) -> dict[str, Any]:
         try:
