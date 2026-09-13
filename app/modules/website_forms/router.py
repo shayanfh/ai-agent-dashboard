@@ -51,6 +51,12 @@ async def verify_website_api_key(authorization: str | None = Header(default=None
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid website API key")
 
 
+async def verify_tts_query_api_key(api_key: str | None = Query(default=None)) -> None:
+    expected = settings.WEBSITE_API_KEY
+    if not expected or not api_key or not secrets.compare_digest(api_key, expected):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid website API key")
+
+
 def _client_ip(request: Request) -> str:
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
@@ -67,7 +73,7 @@ def _send_submission_notification(subject: str, body: str) -> None:
     "/tts-outbound-test",
     response_class=Response,
     responses={200: {"content": {"text/plain": {"example": "OK"}}}},
-    dependencies=[Depends(verify_website_api_key)],
+    dependencies=[Depends(verify_tts_query_api_key)],
 )
 async def inspect_tts_outbound_query(
     request: Request,

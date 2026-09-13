@@ -106,8 +106,8 @@ async def test_tts_outbound_test_logs_query_and_returns_ok(client, caplog):
     with caplog.at_level("INFO", logger="app.modules.website_forms.router"):
         response = await client.get(
             "/api/v1/public/tts-outbound-test",
-            headers=_headers(),
             params=[
+                ("api_key", settings.WEBSITE_API_KEY),
                 ("text", "Hello from the test"),
                 ("phone", "+96890000001"),
                 ("tag", "first"),
@@ -128,6 +128,7 @@ async def test_tts_outbound_test_logs_query_and_returns_ok(client, caplog):
     assert "+96890000001" in endpoint_log
     assert "('tag', 'first')" in endpoint_log
     assert "('tag', 'second')" in endpoint_log
+    assert settings.WEBSITE_API_KEY not in endpoint_log
     assert "must-not-be-logged" not in endpoint_log
     assert "***REDACTED***" in endpoint_log
 

@@ -881,14 +881,14 @@ Before enabling TTS generation and Asterisk call origination, incoming URL param
 inspected with this test-only endpoint:
 
 ```http
-GET /api/v1/public/tts-outbound-test?text=Hello&phone=%2B96890000001&tag=test
-Authorization: Bearer <WEBSITE_API_KEY>
+GET /api/v1/public/tts-outbound-test?api_key=<WEBSITE_API_KEY>&text=Hello&phone=%2B96890000001&tag=test
 ```
 
 `text` is required and must contain between 1 and 4096 characters. The API logs every query
 parameter (including repeated parameters), redacts common credential fields such as `token` and
-`api_key`, and immediately returns plain text `OK`. This endpoint intentionally does not generate
-audio or originate an outbound call yet.
+`api_key`, and immediately returns plain text `OK`. Only this test endpoint accepts the website API
+key as a URL parameter; the other public website endpoints continue to use the Authorization
+header. This endpoint intentionally does not generate audio or originate an outbound call yet.
 
 Apply the signup migration before deploying the new API:
 
