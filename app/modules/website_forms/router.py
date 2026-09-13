@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from fastapi import (
@@ -6,6 +7,7 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
+    Query,
     Request,
     Response,
     status,
@@ -29,6 +31,17 @@ from app.modules.website_forms.voice_preview import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+SENSITIVE_QUERY_KEYS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "password",
+    "secret",
+    "token",
+}
 
 
 async def verify_website_api_key(authorization: str | None = Header(default=None)) -> None:
@@ -48,6 +61,28 @@ def _client_ip(request: Request) -> str:
 def _send_submission_notification(subject: str, body: str) -> None:
     if settings.WEBSITE_NOTIFICATION_EMAIL:
         EmailService().send_message(settings.WEBSITE_NOTIFICATION_EMAIL, subject, body)
+
+
+@router.get(
+    "/tts-outbound-test",
+    response_class=Response,
+    responses={200: {"content": {"text/plain": {"example": "OK"}}}},
+    dependencies=[Depends(verify_website_api_key)],
+)
+async def inspect_tts_outbound_query(
+    request: Request,
+    text: str = Query(min_length=1, max_length=4096),
+) -> Response:
+    """Log an authenticated test callback without generating audio or a call."""
+    query_parameters = [
+        (
+            key,
+            "***REDACTED***" if key.casefold() in SENSITIVE_QUERY_KEYS else value,
+        )
+        for key, value in request.query_params.multi_items()
+    ]
+    logger.info("TTS outbound test query parameters: %r", query_parameters)
+    return Response(content="OK", media_type="text/plain")
 
 
 @router.post(

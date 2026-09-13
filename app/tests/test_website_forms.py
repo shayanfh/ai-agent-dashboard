@@ -93,6 +93,45 @@ async def test_voice_preview_requires_api_key(client):
     assert response.status_code == 401
 
 
+async def test_tts_outbound_test_requires_api_key(client):
+    response = await client.get(
+        "/api/v1/public/tts-outbound-test",
+        params={"text": "Hello"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_tts_outbound_test_logs_query_and_returns_ok(client, caplog):
+    with caplog.at_level("INFO", logger="app.modules.website_forms.router"):
+        response = await client.get(
+            "/api/v1/public/tts-outbound-test",
+            headers=_headers(),
+            params=[
+                ("text", "Hello from the test"),
+                ("phone", "+96890000001"),
+                ("tag", "first"),
+                ("tag", "second"),
+                ("token", "must-not-be-logged"),
+            ],
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "OK"
+    endpoint_log = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.modules.website_forms.router"
+    )
+    assert "Hello from the test" in endpoint_log
+    assert "+96890000001" in endpoint_log
+    assert "('tag', 'first')" in endpoint_log
+    assert "('tag', 'second')" in endpoint_log
+    assert "must-not-be-logged" not in endpoint_log
+    assert "***REDACTED***" in endpoint_log
+
+
 async def test_voice_preview_returns_generated_mp3(client, monkeypatch):
     captured = {}
 

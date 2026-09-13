@@ -875,6 +875,21 @@ be replaced by the caller. Requests are limited to 10 per client IP per hour.
 Configure `OPENAI_API_KEY` and optionally `TTS_PREVIEW_MODEL` (default `tts-1`) on the Backend. Keep
 `WEBSITE_API_KEY` in the website's server-side proxy; do not embed it in browser JavaScript.
 
+### Outbound TTS query test
+
+Before enabling TTS generation and Asterisk call origination, incoming URL parameters can be
+inspected with this test-only endpoint:
+
+```http
+GET /api/v1/public/tts-outbound-test?text=Hello&phone=%2B96890000001&tag=test
+Authorization: Bearer <WEBSITE_API_KEY>
+```
+
+`text` is required and must contain between 1 and 4096 characters. The API logs every query
+parameter (including repeated parameters), redacts common credential fields such as `token` and
+`api_key`, and immediately returns plain text `OK`. This endpoint intentionally does not generate
+audio or originate an outbound call yet.
+
 Apply the signup migration before deploying the new API:
 
 ```bash
