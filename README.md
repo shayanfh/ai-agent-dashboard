@@ -881,14 +881,24 @@ Before enabling TTS generation and Asterisk call origination, incoming URL param
 inspected with this test-only endpoint:
 
 ```http
-GET /api/v1/public/tts-outbound-test?api_key=<WEBSITE_API_KEY>&text=Hello&phone=%2B96890000001&tag=test
+GET /api/v1/public/tts-outbound-test?api_key=<WEBSITE_API_KEY>&text=Hello
 ```
 
 `text` is required and must contain between 1 and 4096 characters. The API logs every query
 parameter (including repeated parameters), redacts common credential fields such as `token` and
-`api_key`, and immediately returns plain text `OK`. Only this test endpoint accepts the website API
-key as a URL parameter; the other public website endpoints continue to use the Authorization
-header. This endpoint intentionally does not generate audio or originate an outbound call yet.
+`api_key`, queues the work, and immediately returns plain text `OK`. The worker performs a read-only
+lookup of source number `+96822388881` in `phone_numbers`, generates a `coral` TTS WAV, uploads it
+directly to the Asterisk provisioner, and calls fixed destination `+96897737034`. It does not create
+or update campaign, call, attempt, subscription, or billing records, and does not report outbound
+events back to the Backend.
+
+The fixed values can be overridden in both the API and Celery worker `.env`:
+
+```dotenv
+TTS_OUTBOUND_SOURCE_NUMBER=+96822388881
+TTS_OUTBOUND_DESTINATION_NUMBER=+96897737034
+TTS_OUTBOUND_VOICE=coral
+```
 
 Apply the signup migration before deploying the new API:
 

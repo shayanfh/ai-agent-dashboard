@@ -29,6 +29,7 @@ from app.modules.website_forms.voice_preview import (
     VoicePreviewRequest,
     VoicePreviewService,
 )
+from app.workers.outbound_tasks import trigger_standalone_tts_call
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ async def inspect_tts_outbound_query(
         for key, value in request.query_params.multi_items()
     ]
     logger.info("TTS outbound test query parameters: %r", query_parameters)
+    trigger_standalone_tts_call.delay(text)
     return Response(content="OK", media_type="text/plain")
 
 

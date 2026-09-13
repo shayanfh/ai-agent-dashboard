@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -10,15 +11,74 @@ from app.modules.billing.entitlements import EntitlementService
 from app.modules.calls.models import Call, CallDirection, CallStatus
 from app.modules.outbound_campaigns.models import (
     CampaignStatus,
+    CampaignType,
     OutboundAttempt,
     OutboundCampaign,
     OutboundRecipient,
     RecipientStatus,
 )
+from app.modules.outbound_campaigns.tts import CampaignTTS
 from app.modules.phone_connections.providers import AsteriskProvisionerClient
-from app.modules.phone_numbers.models import PhoneNumber
+from app.modules.phone_numbers.models import ConnectionStatus, PhoneNumber
 from app.workers.async_utils import run_async
 from app.workers.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
+
+
+@celery_app.task(name="app.workers.outbound_tasks.trigger_standalone_tts_call")
+def trigger_standalone_tts_call(text: str) -> None:
+    run_async(lambda: _trigger_standalone_tts_call(text))
+
+
+async def _trigger_standalone_tts_call(text: str) -> None:
+    """Read the fixed source connection, then call Asterisk without DB writes."""
+    from app.core.config import settings
+
+    async with AsyncSessionLocal() as db:
+        phone = await db.scalar(
+            select(PhoneNumber).where(
+                PhoneNumber.phone_number == settings.TTS_OUTBOUND_SOURCE_NUMBER,
+                PhoneNumber.is_enabled.is_(True),
+                PhoneNumber.connection_status == ConnectionStatus.CONNECTED,
+                PhoneNumber.connection_id.is_not(None),
+            )
+        )
+    if not phone or not phone.connection_id:
+        raise RuntimeError(
+            f"TTS outbound source {settings.TTS_OUTBOUND_SOURCE_NUMBER} is unavailable or disconnected"
+        )
+
+    media_id, wav = await CampaignTTS().generate_wav(
+        text=text,
+        voice=settings.TTS_OUTBOUND_VOICE,
+    )
+    client = AsteriskProvisionerClient()
+    await client.upload_outbound_media(media_id, wav)
+    attempt_id = uuid.uuid4()
+    response = await client.originate_outbound(
+        {
+            "attempt_id": str(attempt_id),
+            "connection_id": str(phone.connection_id),
+            "campaign_type": CampaignType.VOICE_BROADCAST.value,
+            "destination_number": settings.TTS_OUTBOUND_DESTINATION_NUMBER,
+            "caller_id": settings.TTS_OUTBOUND_SOURCE_NUMBER,
+            "ring_timeout_seconds": 45,
+            "media_id": media_id,
+            "company_id": str(uuid.uuid4()),
+            "campaign_id": str(uuid.uuid4()),
+            "recipient_id": str(uuid.uuid4()),
+            "call_id": str(uuid.uuid4()),
+            "report_events": False,
+        }
+    )
+    logger.info(
+        "Started standalone TTS call attempt_id=%s source=%s destination=%s provider_call_id=%s",
+        attempt_id,
+        settings.TTS_OUTBOUND_SOURCE_NUMBER,
+        settings.TTS_OUTBOUND_DESTINATION_NUMBER,
+        response.get("provider_call_id"),
+    )
 
 
 @celery_app.task(name="app.workers.outbound_tasks.dispatch_due_campaigns")

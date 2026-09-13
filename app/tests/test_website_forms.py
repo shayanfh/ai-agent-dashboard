@@ -102,7 +102,14 @@ async def test_tts_outbound_test_requires_api_key(client):
     assert response.status_code == 401
 
 
-async def test_tts_outbound_test_logs_query_and_returns_ok(client, caplog):
+async def test_tts_outbound_test_logs_query_queues_call_and_returns_ok(
+    client, caplog, monkeypatch
+):
+    queued = []
+    monkeypatch.setattr(
+        "app.modules.website_forms.router.trigger_standalone_tts_call.delay",
+        lambda text: queued.append(text),
+    )
     with caplog.at_level("INFO", logger="app.modules.website_forms.router"):
         response = await client.get(
             "/api/v1/public/tts-outbound-test",
@@ -119,6 +126,7 @@ async def test_tts_outbound_test_logs_query_and_returns_ok(client, caplog):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
     assert response.text == "OK"
+    assert queued == ["Hello from the test"]
     endpoint_log = "\n".join(
         record.getMessage()
         for record in caplog.records
