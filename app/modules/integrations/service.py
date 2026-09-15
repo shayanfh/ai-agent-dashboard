@@ -18,7 +18,7 @@ from app.modules.integrations.repository import IntegrationRepository
 from app.modules.integrations.schemas import (
     IntegrationCreate, IntegrationUpdate, IntegrationResponse,
     IntegrationLogResponse, TestConnectionResponse,
-    WhatsAppMessageResponse, WhatsAppMessageSend,
+    WhatsAppMessageResponse, WhatsAppMessageSend, WhatsAppTestMessageResponse,
 )
 from app.core.schemas import PaginatedResponse
 from app.modules.billing.entitlements import EntitlementService
@@ -260,6 +260,50 @@ class IntegrationService:
             message_id=str(message_id) if message_id else None,
             status=str(provider_status) if provider_status is not None else None,
             details=result,
+        )
+
+    async def send_whatsapp_test_message(
+        self,
+        integration_id: uuid.UUID,
+        data: WhatsAppMessageSend,
+        current_user: CurrentUser,
+    ) -> WhatsAppTestMessageResponse:
+        self._require_admin(current_user)
+        company_id = self._get_company_id(current_user)
+        integration = await self.repo.get_by_id_and_company(
+            integration_id, company_id
+        )
+        if not integration:
+            raise NotFoundError("Integration not found")
+        if integration.integration_type != IntegrationType.WHATSAPP:
+            raise ValidationError("This endpoint requires a WhatsApp integration")
+        if integration.status != IntegrationStatus.CONNECTED:
+            raise ConflictError("WhatsApp integration is not connected")
+
+        from app.modules.integrations.providers.ultramsg.service import UltraMsgService
+        result = await UltraMsgService(self.db).send_message(
+            integration,
+            to=data.to.strip(),
+            body=data.body,
+            event_type="test_message",
+        )
+        message_id = (
+            result.get("id")
+            or result.get("messageId")
+            or result.get("message_id")
+        )
+        provider_status = result.get("status") or result.get("sent") or "accepted"
+        return WhatsAppTestMessageResponse(
+            accepted=True,
+            delivered=None,
+            message_id=str(message_id) if message_id else None,
+            provider_status=str(provider_status),
+            details={
+                "provider_response": result,
+                "note": (
+                    "UltraMsg accepted the request; delivery is not confirmed by the send response"
+                ),
+            },
         )
 
     async def get_logs(self, integration_id: uuid.UUID, current_user: CurrentUser, page: int = 1, page_size: int = 20) -> PaginatedResponse[IntegrationLogResponse]:

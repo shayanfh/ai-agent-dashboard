@@ -342,6 +342,51 @@ async def test_company_admin_can_send_custom_ultramsg_message(
 
 
 @pytest.mark.asyncio
+async def test_company_admin_can_send_ultramsg_test_message(
+    client: AsyncClient,
+    admin_a_token: str,
+    db_session: AsyncSession,
+    company_a: Company,
+):
+    integration = Integration(
+        company_id=company_a.id,
+        integration_type=IntegrationType.WHATSAPP,
+        name="Test WhatsApp",
+        api_key_encrypted=encrypt_credential("ultramsg-token"),
+        configuration={"provider": "ultramsg", "instance_id": "instance12345"},
+        status=IntegrationStatus.CONNECTED,
+    )
+    db_session.add(integration)
+    await db_session.flush()
+
+    with patch(
+        "app.modules.integrations.providers.ultramsg.client.UltraMsgClient.send_text",
+        new_callable=AsyncMock,
+        return_value={"sent": "true", "id": "msg_test_123"},
+    ) as send_text:
+        response = await client.post(
+            f"/api/v1/integrations/{integration.id}/whatsapp/test-message",
+            json={"to": "+96890000001", "body": "UltraMsg test message"},
+            headers={"Authorization": f"Bearer {admin_a_token}"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["accepted"] is True
+    assert response.json()["delivered"] is None
+    assert response.json()["message_id"] == "msg_test_123"
+    assert response.json()["provider_status"] == "true"
+    assert "delivery is not confirmed" in response.json()["details"]["note"]
+    send_text.assert_awaited_once_with("+96890000001", "UltraMsg test message")
+    log = await db_session.scalar(
+        select(IntegrationLog).where(
+            IntegrationLog.integration_id == integration.id,
+            IntegrationLog.event_type == "test_message",
+        )
+    )
+    assert log.status == "success"
+
+
+@pytest.mark.asyncio
 async def test_booking_confirmation_renders_configured_template(
     db_session: AsyncSession,
     company_a: Company,

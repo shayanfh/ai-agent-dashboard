@@ -307,6 +307,24 @@ Content-Type: application/json
 }
 ```
 
+Send a diagnostic test message and inspect UltraMsg's raw acceptance response:
+
+```http
+POST /api/v1/integrations/{integration_id}/whatsapp/test-message
+Authorization: Bearer <company-admin-token>
+Content-Type: application/json
+
+{
+  "to": "+96890000001",
+  "body": "UltraMsg test message"
+}
+```
+
+`accepted: true` means UltraMsg accepted the request. It does not prove WhatsApp delivery, so the
+response intentionally returns `delivered: null`, together with the UltraMsg message ID and raw
+provider response. Check the UltraMsg dashboard or message status/webhook acknowledgement to
+confirm delivery.
+
 When a new `car_booking` or `table_reservation` request is created, the Backend
 queues a confirmation automatically on the `integrations` Celery queue. Supported
 template placeholders are `customer_name`, `customer_phone`, `request_type`,

@@ -69,3 +69,11 @@ class WhatsAppMessageResponse(BaseModel):
     message_id: Optional[str] = None
     status: Optional[str] = None
     details: Optional[dict] = None
+
+
+class WhatsAppTestMessageResponse(BaseModel):
+    accepted: bool
+    delivered: Optional[bool] = None
+    message_id: Optional[str] = None
+    provider_status: Optional[str] = None
+    details: Optional[dict] = None
