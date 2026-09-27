@@ -846,6 +846,7 @@ POST /api/v1/auth/resend-verification
 POST /api/v1/auth/forgot-password
 POST /api/v1/auth/reset-password
 GET  /api/v1/onboarding/status
+POST /api/v1/onboarding/analyze-website
 PATCH /api/v1/onboarding/company
 POST /api/v1/onboarding/complete
 ```
@@ -858,6 +859,39 @@ starts a 14-day trial, and changes the Company status to `trial`.
 Raw verification, password-reset, and refresh tokens are never stored in the
 database. Verification and reset tokens are single-use and expire. Password
 reset also revokes every active refresh token for the user.
+
+During onboarding, an authenticated company administrator can request a
+non-persistent website analysis:
+
+```http
+POST /api/v1/onboarding/analyze-website
+Content-Type: application/json
+
+{"website_url":"https://example.com"}
+```
+
+The Backend reads a small set of public pages on the same HTTPS domain and
+uses `WEBSITE_ANALYSIS_MODEL` to return editable `company_suggestion` and
+`agent_suggestion` objects. The analysis endpoint does not write either
+suggestion to the database. The frontend should place the suggestions into
+its onboarding forms and let the customer edit them. Only the later
+`PATCH /api/v1/onboarding/company` request persists `website_url`,
+`description`, and the other accepted company fields. Agent suggestions are
+saved only when the frontend calls the normal Agent create endpoint.
+
+Configure website analysis with:
+
+```dotenv
+OPENAI_API_KEY=...
+WEBSITE_ANALYSIS_MODEL=gpt-6-luna
+WEBSITE_ANALYSIS_TIMEOUT_SECONDS=30
+WEBSITE_ANALYSIS_MAX_PAGES=5
+WEBSITE_ANALYSIS_MAX_PAGE_BYTES=1000000
+WEBSITE_ANALYSIS_MAX_INPUT_CHARS=60000
+```
+
+Only public HTTPS URLs are accepted. Redirects and crawled pages must remain
+on the same domain, and private or local IP addresses are rejected.
 
 The onboarding company endpoint accepts the optional `agent_template` values
 `restaurant`, `car_rental`, `customer_support`, or `blank`. Template agents are

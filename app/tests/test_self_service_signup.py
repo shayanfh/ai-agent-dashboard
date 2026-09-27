@@ -321,6 +321,8 @@ async def test_onboarding_creates_draft_agent_and_pending_sip_connection(
         "/api/v1/onboarding/company",
         headers=headers,
         json={
+            "website_url": "https://rental.example.com",
+            "description": "A vehicle rental business in Muscat.",
             "agent_template": "car_rental",
             "phone_connection": "sip_trunk",
             "sip_configuration": {
@@ -333,6 +335,7 @@ async def test_onboarding_creates_draft_agent_and_pending_sip_connection(
 
     agent = await db_session.scalar(select(Agent).where(Agent.name.like("Car Rental%")))
     connection = await db_session.scalar(select(TelephonyConnection))
+    company = await db_session.scalar(select(Company))
 
     assert initial.status_code == 200
     assert updated.status_code == 200
@@ -340,5 +343,7 @@ async def test_onboarding_creates_draft_agent_and_pending_sip_connection(
     assert updated.json()["steps"]["phone_connection"] is True
     assert agent.status == AgentStatus.DRAFT
     assert connection.status == TelephonyConnectionStatus.PENDING
+    assert company.website_url == "https://rental.example.com/"
+    assert company.description == "A vehicle rental business in Muscat."
     assert completed.status_code == 200
     assert completed.json()["completed"] is True

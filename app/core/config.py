@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     TTS_PREVIEW_MODEL: str = "tts-1"
     TTS_PREVIEW_TIMEOUT_SECONDS: float = 20.0
+    WEBSITE_ANALYSIS_MODEL: str = "gpt-6-luna"
+    WEBSITE_ANALYSIS_TIMEOUT_SECONDS: float = 30.0
+    WEBSITE_ANALYSIS_MAX_PAGES: int = 5
+    WEBSITE_ANALYSIS_MAX_PAGE_BYTES: int = 1_000_000
+    WEBSITE_ANALYSIS_MAX_INPUT_CHARS: int = 60_000
 
     # ElevenLabs voice catalog used by authenticated Dashboard users
     ELEVENLABS_API_KEY: str = ""

@@ -111,11 +111,15 @@ class OnboardingService:
             "country": "country",
             "default_language": "default_language",
             "timezone": "timezone",
+            "website_url": "website_url",
+            "description": "description",
         }
         values = data.model_dump(exclude_unset=True)
         for source, target in field_map.items():
             if source in values and values[source] is not None:
                 value = values[source]
+                if source == "website_url":
+                    value = str(value)
                 if source == "country":
                     value = value.upper()
                 setattr(company, target, value)

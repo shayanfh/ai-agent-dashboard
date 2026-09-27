@@ -1,13 +1,15 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from app.modules.companies.models import CompanyStatus
 
 
 class CompanyCreate(BaseModel):
     name: str
     logo_url: Optional[str] = None
+    website_url: Optional[str] = Field(default=None, max_length=2048, pattern=r"^https://")
+    description: Optional[str] = Field(default=None, max_length=4000)
     business_type: Optional[str] = None
     default_language: str = "en"
     timezone: str = "UTC"
@@ -20,6 +22,8 @@ class CompanyCreate(BaseModel):
 class CompanyUpdate(BaseModel):
     name: Optional[str] = None
     logo_url: Optional[str] = None
+    website_url: Optional[str] = Field(default=None, max_length=2048, pattern=r"^https://")
+    description: Optional[str] = Field(default=None, max_length=4000)
     business_type: Optional[str] = None
     default_language: Optional[str] = None
     timezone: Optional[str] = None
@@ -34,6 +38,8 @@ class CompanyResponse(BaseModel):
     id: uuid.UUID
     name: str
     logo_url: Optional[str]
+    website_url: Optional[str]
+    description: Optional[str]
     business_type: Optional[str]
     default_language: str
     timezone: str
