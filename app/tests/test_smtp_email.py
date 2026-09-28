@@ -60,7 +60,7 @@ def test_smtp_sends_templated_email_with_tls_and_auth(monkeypatch):
     assert smtp.credentials == ("smtp-user", "smtp-password")
     assert smtp.message["From"] == "no-reply@mozaic.test"
     assert smtp.message["To"] == "customer@example.com"
-    assert smtp.message["Subject"] == "Verify your email"
+    assert smtp.message["Subject"] == "Verify your email to get started with Mozaic"
     assert "verification-token" in smtp.message.get_body(preferencelist=("plain",)).get_content()
     assert "https://dashboard.mozaic.test/verify-email" in (
         smtp.message.get_body(preferencelist=("html",)).get_content()
@@ -89,4 +89,3 @@ def test_smtp_skips_tls_and_login_when_disabled(monkeypatch):
     assert smtp.tls_started is False
     assert smtp.credentials is None
     assert smtp.message["Subject"] == "SMTP test"
-
