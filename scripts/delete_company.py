@@ -292,24 +292,24 @@ async def load_company_snapshot(
 
 
 def print_snapshot(snapshot: CompanySnapshot) -> None:
-    print("\n=== مشخصات کامل شرکت ===")
+    print("\n=== Complete company details ===")
     print(json.dumps(snapshot.company, ensure_ascii=False, indent=2, default=str))
-    print("\n=== کاربران شرکت (رمز عبور نمایش داده نمی‌شود) ===")
+    print("\n=== Company users (password hashes are not displayed) ===")
     print(json.dumps(snapshot.users, ensure_ascii=False, indent=2, default=str))
-    print("\n=== تعداد رکوردهای وابسته ===")
+    print("\n=== Related record counts ===")
     non_empty = {key: value for key, value in snapshot.related_counts.items() if value}
     print(json.dumps(non_empty, ensure_ascii=False, indent=2))
-    print(f"\nفایل‌های قابل حذف از Object Storage: {len(snapshot.storage_keys)}")
+    print(f"\nObject Storage files to delete: {len(snapshot.storage_keys)}")
     if snapshot.external_resources:
-        print("\n=== شناسه‌های منابع بیرونی (خودکار حذف نمی‌شوند) ===")
+        print("\n=== External resource IDs (not deleted automatically) ===")
         print(
             json.dumps(
                 snapshot.external_resources, ensure_ascii=False, indent=2, default=str
             )
         )
         print(
-            "هشدار: رکورد محلی این منابع حذف می‌شود، اما حذف/لغو در سرویس بیرونی "
-            "باید با روند همان سرویس انجام شود."
+            "Warning: Local records for these resources will be deleted, but the "
+            "remote resources must be removed or cancelled through their provider."
         )
 
 
@@ -346,14 +346,14 @@ async def delete_storage_objects(keys: list[str]) -> list[tuple[str, str]]:
 
 
 def choose_account(accounts: list[AccountChoice]) -> AccountChoice | None:
-    print("=== ایمیل‌های دارای شرکت ===")
+    print("=== Company user emails ===")
     for index, item in enumerate(accounts, start=1):
         print(
             f"[{index}] {item.email} | {item.full_name} | {item.role} | "
             f"{item.company_name}"
         )
     while True:
-        raw = input("\nشماره یا ایمیل را وارد کنید (q برای خروج): ").strip()
+        raw = input("\nEnter a number or email address (q to quit): ").strip()
         if raw.lower() in {"q", "quit", "exit"}:
             return None
         if raw.isdigit() and 1 <= int(raw) <= len(accounts):
@@ -361,54 +361,65 @@ def choose_account(accounts: list[AccountChoice]) -> AccountChoice | None:
         matches = [item for item in accounts if item.email.casefold() == raw.casefold()]
         if len(matches) == 1:
             return matches[0]
-        print("انتخاب نامعتبر است؛ شماره یا ایمیل را دوباره وارد کنید.")
+        print("Invalid selection. Enter a listed number or email address.")
 
 
 async def run(*, skip_storage: bool = False) -> int:
     async with AsyncSessionLocal() as db:
         accounts = await list_company_accounts(db)
         if not accounts:
-            print("هیچ ایمیل متصل به شرکتی پیدا نشد.")
+            print("No email addresses linked to a company were found.")
             return 0
         selected = choose_account(accounts)
         if not selected:
-            print("عملیات لغو شد.")
+            print("Operation cancelled.")
             return 0
         snapshot = await load_company_snapshot(db, selected.company_id)
         if not snapshot:
-            print("شرکت انتخاب‌شده دیگر وجود ندارد؛ عملیات لغو شد.", file=sys.stderr)
+            print("The selected company no longer exists. Operation cancelled.", file=sys.stderr)
             return 1
 
         print_snapshot(snapshot)
         phrase = f"DELETE {selected.company_id}"
-        print("\nاین عملیات غیرقابل بازگشت است و همه داده‌های محلی شرکت را حذف می‌کند.")
-        confirmation = input(f"برای تأیید دقیقاً عبارت زیر را وارد کنید:\n{phrase}\n> ").strip()
+        print("\nThis action is irreversible and deletes all local company data.")
+        confirmation = input(
+            f"To confirm, enter the following phrase exactly:\n{phrase}\n> "
+        ).strip()
         if confirmation != phrase:
-            print("عبارت تأیید مطابقت نداشت؛ هیچ چیزی حذف نشد.")
+            print("The confirmation phrase did not match. Nothing was deleted.")
             return 0
 
         try:
             deleted = await delete_company_rows(db, selected.company_id)
         except Exception:
             await db.rollback()
-            print("حذف دیتابیس ناموفق بود و تراکنش rollback شد.", file=sys.stderr)
+            print(
+                "Database deletion failed and the transaction was rolled back.",
+                file=sys.stderr,
+            )
             raise
         if not deleted:
-            print("شرکت پیش از حذف پیدا نشد؛ هیچ چیزی حذف نشد.", file=sys.stderr)
+            print(
+                "The company could not be found before deletion. Nothing was deleted.",
+                file=sys.stderr,
+            )
             return 1
 
-    print(f"شرکت «{selected.company_name}» و داده‌های محلی آن حذف شد.")
+    print(f'Company "{selected.company_name}" and its local data were deleted.')
     if skip_storage:
-        print("پاک‌سازی Object Storage با گزینه --skip-storage رد شد.")
+        print("Object Storage cleanup was skipped with --skip-storage.")
         return 0
 
     failures = await delete_storage_objects(snapshot.storage_keys)
     if failures:
-        print("\nدیتابیس حذف شد، اما پاک‌سازی این فایل‌ها ناموفق بود:", file=sys.stderr)
+        print(
+            "\nThe database was deleted, but these files could not be removed:",
+            file=sys.stderr,
+        )
         for key, error in failures:
             print(f"- {key}: {error}", file=sys.stderr)
         return 2
-    print(f"{len(snapshot.storage_keys)} فایل Object Storage نیز حذف شد.")
+    print(f"Deleted {len(snapshot.storage_keys)} Object Storage file(s).")
     return 0
 
 
