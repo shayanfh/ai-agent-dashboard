@@ -65,6 +65,22 @@ docker compose exec api alembic upgrade head
 docker compose exec api python -m scripts.seed
 ```
 
+### Permanently delete a company
+
+Use the interactive maintenance script from the server. It first lists every
+company user email, shows the selected company's fields, users, related record
+counts, storage files, and external-provider identifiers, then requires an exact
+confirmation phrase before deleting anything:
+
+```bash
+docker compose exec api python -m scripts.delete_company
+```
+
+The database operation is transactional and includes all company-owned rows.
+Known MinIO/S3 objects are removed after the database commit. Remote Stripe and
+telephony-provider resources are intentionally listed but are not deleted or
+cancelled automatically; handle those with the provider's normal workflow.
+
 ## Environment Variables
 
 | Variable | Description | Default |
